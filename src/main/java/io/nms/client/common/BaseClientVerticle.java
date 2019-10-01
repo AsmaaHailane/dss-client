@@ -1,5 +1,6 @@
 package io.nms.client.common;
 
+import java.time.Instant;
 import java.util.List;
 
 import org.slf4j.Logger;
@@ -8,11 +9,14 @@ import org.slf4j.LoggerFactory;
 import io.nms.client.cli.ResultListener;
 import io.nms.messages.Capability;
 import io.nms.messages.Interrupt;
-import io.nms.messages.Message;
 import io.nms.messages.Receipt;
 import io.nms.messages.Specification;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
+import io.vertx.core.eventbus.EventBus;
+import io.vertx.core.eventbus.Message;
+import io.vertx.core.json.JsonArray;
+import io.vertx.core.json.JsonObject;
 
 
 public abstract class BaseClientVerticle extends AbstractVerticle {
@@ -24,12 +28,106 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 	public abstract void discoverCapabilities(Future<List<Capability>> prom);
 	public abstract void sendSpecification(Specification spec, Future<Receipt> prom);
 	public abstract void sendInterrupt(Interrupt itr, Future<Receipt> prom); 
+	public abstract void discoverUsers(Future<JsonArray> promise, String type);
 	
 	@Override
 	public void start() {
+		EventBus eb = vertx.eventBus();
+
+		eb.consumer("dss.storage", message -> {
+			JsonObject body = (JsonObject) message.body();
+			String action = body.getString("action");
+			
+			switch (action)
+			{
+			case "get.capabilities":
+				getCapabilities(message);
+				break;		
+
+			case "send.specification":
+				sendSpecification(message);
+				break;
+				
+			case "send.interrupt":
+				sendInterrupt(message);
+				break;
+				
+			case "get.users":
+				getUsers(message);
+				break;
+
+			default:
+				message.reply("");
+			}
+		});
 	}
 	
-	protected void processResult(Message res) {
+	protected void getCapabilities(Message<Object> message) {
+		//JsonObject payload = ((JsonObject) message.body()).getJsonObject("payload");
+		Future<List<Capability>> fut = Future.future(promise -> discoverCapabilities(promise));
+		fut.setHandler(res -> {
+	        if (res.succeeded()) {
+	        	message.reply(res.result());	      
+	        } else {
+	        	message.reply("");
+	        }
+		});
+	}
+	
+	protected void getUsers(Message<Object> message) {
+		JsonObject payload = ((JsonObject) message.body()).getJsonObject("payload");
+		Future<JsonArray> fut = Future.future(promise -> discoverUsers(promise, payload.getString("type") ));
+		fut.setHandler(res -> {
+	        if (res.succeeded()) {
+	        	message.reply(res.result());	      
+	        } else {
+	        	message.reply("");
+	        }
+		});
+	}
+	
+	protected void sendSpecification(Message<Object> message) {
+		JsonObject payload = ((JsonObject) message.body()).getJsonObject("payload");
+		
+		String strCap = payload.getString("capability");
+		int duration = payload.getInteger("duration");
+		int period = payload.getInteger("period");
+		Capability cap = (Capability) io.nms.messages.Message.fromJsonString(strCap);
+		Specification spec = new Specification(cap);
+		
+		long stop = Instant.now().plusSeconds(duration).toEpochMilli();
+		String when = "now ... " + String.valueOf(stop) + " / " + period;
+		spec.setWhen(when);
+		
+		Future<Receipt> fut = Future.future(rct -> sendSpecification(spec, rct));
+		fut.setHandler(res -> {
+	        if (res.succeeded()) {
+	        	message.reply(res.result());	        	
+	        } else {
+	        	message.reply("");
+	        }
+	    });
+	}
+	
+	protected void sendInterrupt(Message<Object> message) {
+		JsonObject payload = ((JsonObject) message.body()).getJsonObject("payload");
+		
+		Receipt receipt = (Receipt) io.nms.messages.Message.fromJsonString(payload.getString("receipt"));
+		
+		Interrupt interrupt = new Interrupt(receipt);
+		String taskId = receipt.getContent("task.id");
+		interrupt.setParameter("task.id", taskId);	
+		Future<Receipt> fut = Future.future(rct -> sendInterrupt(interrupt, rct));
+		fut.setHandler(res -> {
+	        if (res.succeeded()) {	    	 
+	        	message.reply(res.result());	        	
+	        } else {
+	        	message.reply("");
+	        }
+	    });
+	}
+	
+	protected void processResult(io.nms.messages.Message res) {
 		if (this.rListener != null) {
 			this.rListener.onResult(res);
 		}

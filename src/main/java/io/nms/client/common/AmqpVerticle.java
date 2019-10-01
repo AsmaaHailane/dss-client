@@ -13,6 +13,7 @@ import io.vertx.amqp.AmqpConnection;
 import io.vertx.amqp.AmqpMessage;
 import io.vertx.amqp.AmqpReceiver;
 import io.vertx.core.Future;
+import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 
 public abstract class AmqpVerticle extends BaseClientVerticle {
@@ -164,6 +165,29 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 					      .replyTo(replyToAddress)
 					      .id("100")
 					      .withBody(Message.toJsonString(itr, false)).build());
+					}
+				});
+			}
+		});
+	}
+	
+	/* Client is sender. req-rep to retrieve Caps. */
+	public void discoverUsers(Future<JsonArray> promise, String type) {
+		connection.createDynamicReceiver(replyReceiver -> {
+			if (replyReceiver.succeeded()) {
+				String replyToAddress = replyReceiver.result().address();
+				replyReceiver.result().handler(msg -> {
+					promise.complete(msg.bodyAsJsonArray());
+				});
+				connection.createSender("/users", sender -> {
+					if (sender.succeeded()) {
+						JsonObject req = new JsonObject();
+						req.put("type", type);
+						sender.result().send(AmqpMessage.create()
+					      .replyTo(replyToAddress)
+					      .id("101")
+					      .withBody(req.encode())
+					      .build());
 					}
 				});
 			}
