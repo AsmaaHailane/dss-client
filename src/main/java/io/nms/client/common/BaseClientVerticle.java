@@ -1,7 +1,9 @@
 package io.nms.client.common;
 
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,6 +19,11 @@ import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.eventbus.Message;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
+import io.vertx.ext.web.Router;
+import io.vertx.ext.web.handler.sockjs.BridgeOptions;
+import io.vertx.ext.web.handler.sockjs.PermittedOptions;
+import io.vertx.ext.web.handler.sockjs.SockJSHandler;
+import io.vertx.ext.web.handler.CorsHandler;
 
 
 public abstract class BaseClientVerticle extends AbstractVerticle {
@@ -30,11 +37,30 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 	public abstract void sendInterrupt(Interrupt itr, Future<Receipt> prom); 
 	public abstract void discoverUsers(Future<JsonArray> promise, String type);
 	
+
 	@Override
 	public void start() {
+		
 		EventBus eb = vertx.eventBus();
+		
+		Router router = Router.router(vertx);
+		BridgeOptions opts = new BridgeOptions()
+				.addOutboundPermitted(new PermittedOptions().setAddress("client"))
+				.addInboundPermitted(new PermittedOptions().setAddress("client"));
+		SockJSHandler ebHandler = SockJSHandler.create(vertx).bridge(opts);
+		
+		Set<String> allowedHeaders = new HashSet<>();
+		allowedHeaders.add("Access-Control-Allow-Origin");
+		
+		CorsHandler ch = CorsHandler.create("http://10.11.200.213:8080").allowedHeaders(allowedHeaders)
+				.allowCredentials(false);
+		
+		
+		router.route().handler(ch);
+		router.route("/eventbus/*").handler(ebHandler);
 
-		eb.consumer("dss.storage", message -> {
+		eb.consumer("client", message -> {
+			LOG.info("got EB message");
 			JsonObject body = (JsonObject) message.body();
 			String action = body.getString("action");
 			
