@@ -1,0 +1,148 @@
+package io.nms.client.cli;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Scanner;
+import java.util.TimerTask;
+
+import io.nms.client.common.AmqpClientVerticle;
+import io.nms.messages.Capability;
+import io.nms.messages.Interrupt;
+import io.nms.messages.Message;
+import io.nms.messages.Receipt;
+import io.nms.messages.Specification;
+import io.vertx.core.Future;
+
+public class Console extends TimerTask implements ResultListener {
+	private static Console instance = null;
+	private List<Capability> capabilities = new ArrayList<Capability>();
+	private Receipt currentRcpt = null;
+	private AmqpClientVerticle verticle = null;
+	
+	private Console(AmqpClientVerticle verticle) {
+		this.verticle = verticle;
+		this.verticle.registerResultListener(this);
+	}
+  
+	public static Console getInstance(AmqpClientVerticle verticle) { 
+		if (instance == null) {
+			instance = new Console(verticle);
+		}
+		return instance;
+	}
+
+	@Override
+	public void run() {
+		Scanner input = new Scanner(System.in);
+	    String[] opt = { "" };  
+	    while (!"quit".equals(opt[0])) {
+	    	System.out.println(">");
+	    	opt[0] = input.nextLine();
+	    	
+	        if ("discover".equals(opt[0])) {
+	        	System.out.println("Discover Capabilities");
+	        	Future<List<Capability>> fut = Future
+	        			.future(promise -> verticle.discoverCapabilities(promise));
+				fut.setHandler(res -> {
+			        if (res.succeeded()) {
+			        	capabilities = res.result();
+			        	printCapabilities();			      
+			        }
+			        System.out.println(">");
+			    });
+	        }
+	        if ("spec".equals(opt[0])) {
+	        	if (capabilities.isEmpty()) {
+	        		System.out.println("No Capabilities.");
+	        		System.out.println("Type 'discover' to retrieve Capabilities.");
+	        	} else {
+	        		System.out.println("Enter Capability No.");
+	        		int c = Integer.parseInt(input.nextLine());
+	        		if ((c >= 0) && (c < capabilities.size())) {
+	        			createAndSendSpecification(capabilities.get(c));
+	        		} else {
+	        			System.out.println("Unknown Capability No.");
+	        		}
+	        	}
+	        }
+	        if (opt[0].isEmpty() && (currentRcpt != null)) {
+	        	System.out.println("Interrupt Specification...");
+	    		Interrupt interrupt = new Interrupt(currentRcpt);
+	    		String taskId = currentRcpt.getContent("task.id");
+	    		interrupt.setParameter("task.id", taskId);	
+	    		Future<Receipt> fut = Future.future(rct -> verticle.sendInterrupt(interrupt, rct));
+	    		fut.setHandler(res -> {
+	    	        if (res.succeeded()) {	    	 
+	    	        	printReceipt(res.result());	        	
+	    	        }
+	    	        currentRcpt = null;
+	    	        System.out.println(">");
+	    	    });
+	        }
+	    }
+	    System.out.println("Goodbye.");
+	    input.close();
+	    System.exit(0);
+	}
+	
+	private void printCapabilities() {
+		for (int i = 0; i < capabilities.size(); i++) {
+			System.out.print("["+i+"] ");
+		    System.out.println(Message.toJsonString(capabilities.get(i), true));
+		    System.out.println();
+		}
+	}
+	
+	private void createAndSendSpecification(Capability cap) {
+		System.out.println("Create Specification (Parameters not supported yet)");
+		Scanner input = new Scanner(System.in);
+		Specification spec = new Specification(cap);
+		
+		int duration = 0;
+		System.out.print("Duration (seconds): ");
+		duration = input.nextInt();
+		input.nextLine();
+		long stop = Instant.now().plusSeconds(duration).toEpochMilli();
+		
+		int period = 0;
+		System.out.print("Period (milliseconds): ");
+		period = input.nextInt();
+		input.nextLine();
+		String when = "now ... " + String.valueOf(stop) + " / " + period;
+		spec.setWhen(when);
+		
+		/*for (String key : cap.getParameters().keySet()) {
+			System.out.print("Enter value of param" +key+": ");
+			String value = input.nextLine();
+			spec.setParameter(key, value);
+			System.out.println();
+		}*/
+		
+		System.out.println("Specification created:\n"+Message.toJsonString(spec, true));
+		System.out.println("Send Specification y/n?");
+		System.out.println("Type Enter to stop the Specification.");
+		String answer = input.nextLine();
+		if ("y".equals(answer)) {
+			Future<Receipt> fut = Future.future(rct -> verticle.sendSpecification(spec, rct));
+			fut.setHandler(res -> {
+		        if (res.succeeded()) {
+		        	currentRcpt = res.result();
+		        	printReceipt(currentRcpt);	        	
+		        } 	  
+		    });
+		}
+	}
+	
+	private void printReceipt(Receipt rct) {
+		System.out.println("Receipt: ");
+		System.out.println(Message.toJsonString(rct, true));
+	}
+
+	@Override
+	public void onResult(Message res) {
+		System.out.println("Result: ");
+		System.out.println(Message.toJsonString(res, true));
+	}
+
+}

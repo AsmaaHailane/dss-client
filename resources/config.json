@@ -1,0 +1,8 @@
+[
+	"io.nms.endsystem.probes.ProbeOshiCpu", 
+	"io.nms.endsystem.probes.ProbeOshiMemory",
+	"io.nms.endsystem.probes.ProbeOshiDisks",
+	"io.nms.endsystem.probes.ProbeOshiProcess",
+	"io.nms.endsystem.probes.ProbeOshiNet",
+	"io.nms.endsystem.probes.ProbeOshiFileSystem"
+]

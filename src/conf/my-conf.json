@@ -1,0 +1,13 @@
+{
+	"client" : 
+	{
+  		"name": "/",
+      "username": "amar",
+      "password": "amar1"
+	},
+  	"amqp": 
+  	{
+  		"host" : "10.11.200.124",
+  		"port" : 5672
+  	}
+}
