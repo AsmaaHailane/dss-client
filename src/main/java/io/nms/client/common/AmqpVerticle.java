@@ -196,7 +196,6 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 	
 	@Override
 	public void stop() {
-		/* TODO: close connections... */
 		super.stop();
 	}
 

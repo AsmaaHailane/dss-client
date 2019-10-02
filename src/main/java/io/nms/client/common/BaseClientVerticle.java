@@ -1,6 +1,7 @@
 package io.nms.client.common;
 
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -17,13 +18,14 @@ import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
 import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.eventbus.Message;
+import io.vertx.core.http.HttpMethod;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
+import io.vertx.ext.web.handler.CorsHandler;
 import io.vertx.ext.web.handler.sockjs.BridgeOptions;
 import io.vertx.ext.web.handler.sockjs.PermittedOptions;
 import io.vertx.ext.web.handler.sockjs.SockJSHandler;
-import io.vertx.ext.web.handler.CorsHandler;
 
 
 public abstract class BaseClientVerticle extends AbstractVerticle {
@@ -37,32 +39,41 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 	public abstract void sendInterrupt(Interrupt itr, Future<Receipt> prom); 
 	public abstract void discoverUsers(Future<JsonArray> promise, String type);
 	
+	private static final String ADDRESS = "client";
+	
+	EventBus eb = null;
 
 	@Override
 	public void start() {
-		
-		EventBus eb = vertx.eventBus();
-		
+		eb = vertx.eventBus();
 		Router router = Router.router(vertx);
-		BridgeOptions opts = new BridgeOptions()
-				.addOutboundPermitted(new PermittedOptions().setAddress("client"))
-				.addInboundPermitted(new PermittedOptions().setAddress("client"));
-		SockJSHandler ebHandler = SockJSHandler.create(vertx).bridge(opts);
 		
+		SockJSHandler sockJSHandler = SockJSHandler.create(vertx);
+		BridgeOptions bridgeOptions = new BridgeOptions()
+				.addInboundPermitted(new PermittedOptions().setAddress(ADDRESS))
+				.addOutboundPermitted(new PermittedOptions().setAddress(ADDRESS));
+		sockJSHandler.bridge(bridgeOptions);
+
 		Set<String> allowedHeaders = new HashSet<>();
+		allowedHeaders.add("x-requested-with");
 		allowedHeaders.add("Access-Control-Allow-Origin");
-		
-		CorsHandler ch = CorsHandler.create("http://10.11.200.213:8080").allowedHeaders(allowedHeaders)
+		allowedHeaders.add("origin");
+		allowedHeaders.add("Content-Type");
+		allowedHeaders.add("accept");
+		allowedHeaders.add("X-PINGARUNER");
+
+		CorsHandler corsHandler = CorsHandler.create("http://10.11.200.213:8080").allowedHeaders(allowedHeaders)
 				.allowCredentials(false);
+		Arrays.asList(HttpMethod.values()).stream().forEach(method -> corsHandler.allowedMethod(method));
+		router.route().handler(corsHandler);
+
+		router.route("/eventbus/*").handler(sockJSHandler);
 		
-		
-		router.route().handler(ch);
-		router.route("/eventbus/*").handler(ebHandler);
+		vertx.createHttpServer().requestHandler(router::accept).listen(9000);
 
 		eb.consumer("client", message -> {
 			LOG.info("got EB message");
-			JsonObject body = (JsonObject) message.body();
-			String action = body.getString("action");
+			String action = message.headers().get("action");
 			
 			switch (action)
 			{
@@ -77,10 +88,6 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 			case "send.interrupt":
 				sendInterrupt(message);
 				break;
-				
-			case "get.users":
-				getUsers(message);
-				break;
 
 			default:
 				message.reply("");
@@ -93,19 +100,10 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 		Future<List<Capability>> fut = Future.future(promise -> discoverCapabilities(promise));
 		fut.setHandler(res -> {
 	        if (res.succeeded()) {
-	        	message.reply(res.result());	      
-	        } else {
-	        	message.reply("");
-	        }
-		});
-	}
-	
-	protected void getUsers(Message<Object> message) {
-		JsonObject payload = ((JsonObject) message.body()).getJsonObject("payload");
-		Future<JsonArray> fut = Future.future(promise -> discoverUsers(promise, payload.getString("type") ));
-		fut.setHandler(res -> {
-	        if (res.succeeded()) {
-	        	message.reply(res.result());	      
+	        	String caps = io.nms.messages.Message.toStringFromList(res.result());
+	        	LOG.info("Got Capabilities: "+caps);
+	        	JsonObject json = new JsonObject().put("capabilities", caps);
+	        	message.reply(json);	      
 	        } else {
 	        	message.reply("");
 	        }
@@ -124,11 +122,11 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 		long stop = Instant.now().plusSeconds(duration).toEpochMilli();
 		String when = "now ... " + String.valueOf(stop) + " / " + period;
 		spec.setWhen(when);
-		
+		LOG.info("Send Specification: "+io.nms.messages.Message.toJsonString(spec, false));
 		Future<Receipt> fut = Future.future(rct -> sendSpecification(spec, rct));
 		fut.setHandler(res -> {
 	        if (res.succeeded()) {
-	        	message.reply(res.result());	        	
+	        	message.reply(io.nms.messages.Message.toJsonString(res.result(), false));	        	
 	        } else {
 	        	message.reply("");
 	        }
@@ -142,21 +140,37 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 		
 		Interrupt interrupt = new Interrupt(receipt);
 		String taskId = receipt.getContent("task.id");
-		interrupt.setParameter("task.id", taskId);	
+		interrupt.setParameter("task.id", taskId);
+		LOG.info("Send Interrupt: "+io.nms.messages.Message.toJsonString(interrupt, false));
 		Future<Receipt> fut = Future.future(rct -> sendInterrupt(interrupt, rct));
 		fut.setHandler(res -> {
 	        if (res.succeeded()) {	    	 
-	        	message.reply(res.result());	        	
+	        	message.reply(io.nms.messages.Message.toJsonString(res.result(), false));	        	
 	        } else {
 	        	message.reply("");
 	        }
 	    });
 	}
 	
+	/*protected void getUsers(Message<Object> message) {
+		JsonObject payload = ((JsonObject) message.body()).getJsonObject("payload");
+		Future<JsonArray> fut = Future.future(promise -> discoverUsers(promise, payload.getString("type") ));
+		fut.setHandler(res -> {
+        	if (res.succeeded()) {
+        		message.reply(res.result().encode());	      
+        	} else {
+        		message.reply("");
+        	}
+		});
+    }*/
+	
 	protected void processResult(io.nms.messages.Message res) {
+		String resStr = io.nms.messages.Message.toJsonString(res, false);
+		LOG.info("Got Result: "+resStr);
 		if (this.rListener != null) {
 			this.rListener.onResult(res);
 		}
+		eb.send("post.result", resStr);
 	}
 	  
 	public void registerResultListener(ResultListener rl) {
