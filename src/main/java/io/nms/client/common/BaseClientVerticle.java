@@ -37,7 +37,7 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 	public abstract void discoverCapabilities(Future<List<Capability>> prom);
 	public abstract void sendSpecification(Specification spec, Future<Receipt> prom);
 	public abstract void sendInterrupt(Interrupt itr, Future<Receipt> prom); 
-	public abstract void discoverUsers(Future<JsonArray> promise, String type);
+	public abstract void sendAdminReq(JsonObject req, Future<String> promise);
 	
 	private static final String ADDRESS = "client";
 	
@@ -88,7 +88,15 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 			case "send.interrupt":
 				sendInterrupt(message);
 				break;
-
+				
+			case "get.clients":
+				getClients(message);
+				break;
+				
+			case "get.agents":
+				getAgents(message);
+				break;
+			
 			default:
 				message.reply("");
 			}
@@ -96,7 +104,6 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 	}
 	
 	protected void getCapabilities(Message<Object> message) {
-		//JsonObject payload = ((JsonObject) message.body()).getJsonObject("payload");
 		Future<List<Capability>> fut = Future.future(promise -> discoverCapabilities(promise));
 		fut.setHandler(res -> {
 	        if (res.succeeded()) {
@@ -109,6 +116,39 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 	        }
 		});
 	}
+	
+	protected void getAgents(Message<Object> message) {
+		JsonObject req = new JsonObject();
+    	req.put("action", "get_all_agents");
+    	req.put("payload", new JsonObject());
+    	Future<String> fut = Future
+    			.future(promise -> sendAdminReq(req, promise));
+		fut.setHandler(res -> {
+	        if (res.succeeded()) {
+	        	JsonObject r = new JsonObject(res.result());
+	        	message.reply(new JsonObject().put("agents", r.getJsonArray("payload")));
+	        } else {
+	        	message.reply(new JsonObject().put("agents", new JsonObject()));
+	        }
+	    });
+	}
+	
+	protected void getClients(Message<Object> message) {
+		JsonObject req = new JsonObject();
+    	req.put("action", "get_all_clients");
+    	req.put("payload", new JsonObject());
+    	Future<String> fut = Future
+    			.future(promise -> sendAdminReq(req, promise));
+		fut.setHandler(res -> {
+	        if (res.succeeded()) {
+	        	JsonObject r = new JsonObject(res.result());
+	        	message.reply(new JsonObject().put("clients", r.getJsonArray("payload")));
+	        } else {
+	        	message.reply(new JsonObject().put("clients", new JsonObject()));
+	        }
+	    });
+	}
+	
 	
 	protected void sendSpecification(Message<Object> message) {
 		JsonObject payload = ((JsonObject) message.body()).getJsonObject("payload");
@@ -151,18 +191,6 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 	        }
 	    });
 	}
-	
-	/*protected void getUsers(Message<Object> message) {
-		JsonObject payload = ((JsonObject) message.body()).getJsonObject("payload");
-		Future<JsonArray> fut = Future.future(promise -> discoverUsers(promise, payload.getString("type") ));
-		fut.setHandler(res -> {
-        	if (res.succeeded()) {
-        		message.reply(res.result().encode());	      
-        	} else {
-        		message.reply("");
-        	}
-		});
-    }*/
 	
 	protected void processResult(io.nms.messages.Message res) {
 		String resStr = io.nms.messages.Message.toJsonString(res, false);

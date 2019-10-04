@@ -13,6 +13,7 @@ import io.nms.messages.Message;
 import io.nms.messages.Receipt;
 import io.nms.messages.Specification;
 import io.vertx.core.Future;
+import io.vertx.core.json.JsonObject;
 
 public class Console extends TimerTask implements ResultListener {
 	private static Console instance = null;
@@ -40,6 +41,57 @@ public class Console extends TimerTask implements ResultListener {
 	    	System.out.println(">");
 	    	opt[0] = input.nextLine();
 	    	
+	    	if ("clients".equals(opt[0])) {
+	        	System.out.println("Get clients");
+	        	JsonObject req = new JsonObject();
+	        	req.put("action", "get_all_clients");
+	        	req.put("payload", new JsonObject());
+	        	Future<String> fut = Future
+	        			.future(promise -> verticle.sendAdminReq(req, promise));
+				fut.setHandler(res -> {
+			        if (res.succeeded()) {
+			        	JsonObject r = new JsonObject(res.result());
+			        	System.out.println(r.getJsonArray("payload").encodePrettily());
+			        } else {
+			        	System.out.println("Error: "+res.cause());
+			        }
+			        System.out.println(">");
+			    });
+	        }
+	    	if ("agents".equals(opt[0])) {
+	        	System.out.println("Get agents");
+	        	JsonObject req = new JsonObject();
+	        	req.put("action", "get_all_agents");
+	        	req.put("payload", new JsonObject());
+	        	Future<String> fut = Future
+	        			.future(promise -> verticle.sendAdminReq(req, promise));
+				fut.setHandler(res -> {
+			        if (res.succeeded()) {
+			        	JsonObject r = new JsonObject(res.result());
+			        	System.out.println(r.getJsonArray("payload").encodePrettily());
+			        } else {
+			        	System.out.println("Error: "+res.cause());
+			        }
+			        System.out.println(">");
+			    });
+	        }
+	    	if ("discoverall".equals(opt[0])) {
+	        	System.out.println("Discover All Capabilities");
+	        	JsonObject req = new JsonObject();
+	        	req.put("action", "get_caps_all");
+	        	req.put("payload", new JsonObject());
+	        	Future<String> fut = Future
+	        			.future(promise -> verticle.sendAdminReq(req, promise));
+				fut.setHandler(res -> {
+			        if (res.succeeded()) {
+			        	JsonObject r = new JsonObject(res.result());
+			        	System.out.println(r.getJsonArray("payload").encodePrettily());
+			        } else {
+			        	System.out.println("Error: "+res.cause());
+			        }
+			        System.out.println(">");
+			    });
+	        }
 	        if ("discover".equals(opt[0])) {
 	        	System.out.println("Discover Capabilities");
 	        	Future<List<Capability>> fut = Future
@@ -70,7 +122,8 @@ public class Console extends TimerTask implements ResultListener {
 	        	System.out.println("Interrupt Specification...");
 	    		Interrupt interrupt = new Interrupt(currentRcpt);
 	    		String taskId = currentRcpt.getContent("task.id");
-	    		interrupt.setParameter("task.id", taskId);	
+	    		interrupt.setParameter("task.id", taskId);
+	    		interrupt.setTimestampNow();
 	    		Future<Receipt> fut = Future.future(rct -> verticle.sendInterrupt(interrupt, rct));
 	    		fut.setHandler(res -> {
 	    	        if (res.succeeded()) {	    	 
@@ -124,6 +177,7 @@ public class Console extends TimerTask implements ResultListener {
 		System.out.println("Type Enter to stop the Specification.");
 		String answer = input.nextLine();
 		if ("y".equals(answer)) {
+			spec.setTimestampNow();
 			Future<Receipt> fut = Future.future(rct -> verticle.sendSpecification(spec, rct));
 			fut.setHandler(res -> {
 		        if (res.succeeded()) {

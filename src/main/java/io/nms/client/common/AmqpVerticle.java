@@ -18,6 +18,7 @@ import io.vertx.core.json.JsonObject;
 
 public abstract class AmqpVerticle extends BaseClientVerticle {
 	protected String clientName = "";
+	protected String clientRole = "guest";
 	private AmqpConnection connection = null;
 	
 	/* Create AMQP connection to the broker */
@@ -45,12 +46,12 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 	
 	/* Client is sender. req-rep for authentication */	
 	protected void requestAuthentication(String username, String password, Future<Void> promise) {
-		/* TODO: include username + password for authentication */
 		connection.createDynamicReceiver(replyReceiver -> {
 			if (replyReceiver.succeeded()) {
 				String replyToAddress = replyReceiver.result().address();
 				replyReceiver.result().handler(msg -> {
 					clientName = msg.bodyAsString();
+					/* TODO: set clientRole... */
 					if (clientName.isEmpty()) {			
 						promise.fail("Authentication failed.");
 					} else {
@@ -58,7 +59,7 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 						promise.complete();
 					}			
 				});
-				connection.createSender("/authentication", sender -> {
+				connection.createSender("/client/authentication", sender -> {
 					if (sender.succeeded()) {
 						JsonObject req = new JsonObject();
 						req.put("username", username);
@@ -87,12 +88,15 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 				replyReceiver.result().handler(msg -> {
 					promise.complete(Message.toListfromString(msg.bodyAsString()));
 				});
-				connection.createSender("/dss/capabilities", sender -> {
+				connection.createSender("/client/capabilities", sender -> {
 					if (sender.succeeded()) {
+						JsonObject req = new JsonObject();
+						req.put("client_role", clientRole);
 						sender.result().send(AmqpMessage.create()
 					      .replyTo(replyToAddress)
 					      .id("100")
-					      .withBody("role...").build());
+					      .withBody(req.encode())
+					      .build());
 					}
 				});
 			}
@@ -131,8 +135,6 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 	
 	/* Client is subscriber. pub-sub for Client to get Results. */
 	protected void subscribeToResults(Receipt rct, Future<Void> promise) {
-		/* topic name from receipt... */
-		/* topic name: <agentName>/results/<role> */
 		connection.createReceiver(rct.getEndpoint()+"/results",
 			done -> {
 				if (done.failed()) {
@@ -171,25 +173,30 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 		});
 	}
 	
-	/* Client is sender. req-rep to retrieve Caps. */
-	public void discoverUsers(Future<JsonArray> promise, String type) {
+	/* Client is sender. req-rep to send Admin requests. 
+	 * json request is set by caller; console, GUI.
+	 * */
+	public void sendAdminReq(JsonObject req, Future<String> promise) {
+		//LOG.info("sending admin req: "+req.encodePrettily());
 		connection.createDynamicReceiver(replyReceiver -> {
 			if (replyReceiver.succeeded()) {
 				String replyToAddress = replyReceiver.result().address();
 				replyReceiver.result().handler(msg -> {
-					promise.complete(msg.bodyAsJsonArray());
+					promise.complete(msg.bodyAsString());
 				});
-				connection.createSender("/users", sender -> {
+				connection.createSender("/admin", sender -> {
 					if (sender.succeeded()) {
-						JsonObject req = new JsonObject();
-						req.put("type", type);
 						sender.result().send(AmqpMessage.create()
 					      .replyTo(replyToAddress)
 					      .id("101")
 					      .withBody(req.encode())
 					      .build());
+					} else {
+						promise.fail(sender.cause());
 					}
 				});
+			} else {
+				promise.fail(replyReceiver.cause());
 			}
 		});
 	}
