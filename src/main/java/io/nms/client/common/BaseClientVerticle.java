@@ -82,6 +82,7 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 				break;		
 
 			case "send.specification":
+				LOG.info("send.specification");
 				sendSpecification(message);
 				break;
 				
@@ -151,11 +152,12 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 	
 	
 	protected void sendSpecification(Message<Object> message) {
-		JsonObject payload = ((JsonObject) message.body()).getJsonObject("payload");
+		//LOG.info(((JsonObject)message.body()).encodePrettily());
+		JsonObject payload = ((JsonObject) message.body());
 		
 		String strCap = payload.getString("capability");
-		int duration = payload.getInteger("duration");
-		int period = payload.getInteger("period");
+		int duration = Integer.valueOf(payload.getString("duration"));
+		int period = Integer.valueOf(payload.getString("period"));
 		Capability cap = (Capability) io.nms.messages.Message.fromJsonString(strCap);
 		Specification spec = new Specification(cap);
 		

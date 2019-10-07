@@ -148,7 +148,7 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 				        .handler(msg -> {
 				        	processResult(Message.fromJsonString(msg.bodyAsString()));				  
 				        });
-				    LOG.info("Agent Capabilities service initialized.");
+				    LOG.info("Listening to Agent results.");
 				    promise.complete();
 				}
 			});
