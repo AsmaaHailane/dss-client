@@ -18,7 +18,7 @@ import io.vertx.core.json.JsonObject;
 
 public abstract class AmqpVerticle extends BaseClientVerticle {
 	protected String clientName = "";
-	protected String clientRole = "guest";
+	protected String clientRole = "";
 	private AmqpConnection connection = null;
 	
 	/* Create AMQP connection to the broker */
@@ -50,14 +50,15 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 			if (replyReceiver.succeeded()) {
 				String replyToAddress = replyReceiver.result().address();
 				replyReceiver.result().handler(msg -> {
-					clientName = msg.bodyAsString();
-					/* TODO: set clientRole... */
-					if (clientName.isEmpty()) {			
+					JsonObject repJson = new JsonObject(msg.bodyAsString());
+					clientName = repJson.getString("name","");
+					clientRole = repJson.getString("role","");
+					if (clientName.isEmpty()) {
 						promise.fail("Authentication failed.");
 					} else {
-						LOG.info("Got name: "+clientName);
+						LOG.info("Client: "+repJson.encodePrettily());
 						promise.complete();
-					}			
+					}
 				});
 				connection.createSender("/client/authentication", sender -> {
 					if (sender.succeeded()) {
