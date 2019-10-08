@@ -11,11 +11,12 @@ import org.json.simple.parser.ParseException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.github.rvesse.airline.SingleCommand;
-
 import io.nms.client.cli.Console;
 import io.nms.client.common.AmqpClientVerticle;
+import io.nms.storage.StorageVerticle;
+import io.vertx.core.CompositeFuture;
 import io.vertx.core.DeploymentOptions;
+import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonObject;
 
@@ -40,26 +41,51 @@ public class Main {
 			LOG.error(e.getMessage());
 			System.exit(1);
 		}
-
-		LOG.info("Starting Client...");
+		
+		LOG.info("Deploying comunication module.");
+		final Future<Void> commFut = Future.future();
 		final JsonObject vertConfig = new JsonObject(configuration.toJSONString());
 		Vertx vertx = Vertx.vertx();
 		final AmqpClientVerticle vClient = new AmqpClientVerticle();
-		 
+		
 		vertx.deployVerticle(vClient, new DeploymentOptions()
 			.setWorker(true)
 			.setConfig(vertConfig),
 			res -> {
-				if (res.succeeded()) {
-					LOG.info("Client ready.");
-					cli = Console.getInstance(vClient);
-					Timer timer = new Timer(true);
-					timer.schedule((TimerTask) cli, 0);
+				if (res.failed()) {
+					LOG.info("Failed to deploy communication module.");
+					commFut.fail(res.cause());
 				} else {
-					LOG.error(res.cause().getMessage());
-					System.exit(1);
+					commFut.complete();
 				}
 			});
+		
+		// storage verticle
+		LOG.info("Deploying storage module.");
+		String[] deployId = {""};
+		final Future<Void> storagefut = Future.future();
+		vertx.deployVerticle(StorageVerticle.class.getName(), res -> {
+			if (res.failed()) {
+				LOG.error("Failed to deploy storage module");
+				storagefut.fail(res.cause());
+			} else {
+				deployId[0] = res.result();
+				storagefut.complete();
+			}
+		});
+		
+		CompositeFuture.all(commFut,storagefut)
+		.setHandler(res -> {
+			if (res.succeeded()) {
+				LOG.info("Client ready.");
+				cli = Console.getInstance(vClient);
+				Timer timer = new Timer(true);
+				timer.schedule((TimerTask) cli, 0);
+			} else {
+				LOG.error(res.cause().getMessage());
+				System.exit(1);
+			}
+		});
 	}
 }
   

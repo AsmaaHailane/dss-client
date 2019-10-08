@@ -19,7 +19,6 @@ import io.vertx.core.Future;
 import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.eventbus.Message;
 import io.vertx.core.http.HttpMethod;
-import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.handler.CorsHandler;
@@ -197,10 +196,24 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 	protected void processResult(io.nms.messages.Message res) {
 		String resStr = io.nms.messages.Message.toJsonString(res, false);
 		LOG.info("Got Result: "+resStr);
+		
+		// send to Console
 		if (this.rListener != null) {
 			this.rListener.onResult(res);
 		}
+		
+		// send to GUI over eventbus
 		eb.send("post.result", resStr);
+		
+		// send to storage over eventbus
+		JsonObject message = new JsonObject()
+			.put("action", "add_result")
+			.put("payload", new JsonObject(resStr));
+			eb.send("dss.storage", message, reply -> {
+				if (reply.succeeded()) {
+					LOG.info("Result stored.");
+				}
+			});
 	}
 	  
 	public void registerResultListener(ResultListener rl) {

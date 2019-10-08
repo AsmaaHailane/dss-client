@@ -59,6 +59,13 @@
 			<artifactId>airline</artifactId>
 			<version>2.7.2</version>
 		</dependency>
+		
+		<!-- Storage service -->
+	<dependency>
+      <groupId>io.nms</groupId>
+      <artifactId>storage</artifactId>
+      <version>0.0.1-SNAPSHOT</version>
+    </dependency>
 	</dependencies>
 
 
