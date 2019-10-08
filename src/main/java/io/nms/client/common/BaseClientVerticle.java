@@ -179,17 +179,12 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 	}
 	
 	protected void getResults(Message<Object> message) {
-		/*
-		 * {
-		 * 	"payload": 
-		 * 		{
-		 * 		  "schema":"..."
-		 * 		}
-		 * }
-		 * */
+		JsonObject payload = ((JsonObject) message.body());
+		String strRct = payload.getString("receipt");
+		Receipt rct = (Receipt) io.nms.messages.Message.fromJsonString(strRct);
     	JsonObject toStorageMsg = new JsonObject()
     		.put("action", "get_results_operation")
-    		.put("payload", ((JsonObject) message.body()));
+    		.put("payload", rct.getSchema());
     			eb.send("dss.storage", toStorageMsg, reply -> {
     				if (reply.succeeded()) {
     					message.reply((String) reply.result().body());
