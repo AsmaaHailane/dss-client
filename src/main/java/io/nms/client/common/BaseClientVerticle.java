@@ -38,7 +38,7 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 	public abstract void sendInterrupt(Interrupt itr, Future<Receipt> prom); 
 	public abstract void sendAdminReq(JsonObject req, Future<String> promise);
 	
-	private static final String ADDRESS = "client";
+	private static final String ADDRESS = "client.*";
 	
 	EventBus eb = null;
 
@@ -49,8 +49,8 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 		
 		SockJSHandler sockJSHandler = SockJSHandler.create(vertx);
 		BridgeOptions bridgeOptions = new BridgeOptions()
-				.addInboundPermitted(new PermittedOptions().setAddress(ADDRESS))
-				.addOutboundPermitted(new PermittedOptions().setAddress(ADDRESS));
+				.addInboundPermitted(new PermittedOptions().setAddressRegex(ADDRESS))
+				.addOutboundPermitted(new PermittedOptions().setAddressRegex(ADDRESS));
 		sockJSHandler.bridge(bridgeOptions);
 
 		Set<String> allowedHeaders = new HashSet<>();
@@ -85,6 +85,10 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 				sendSpecification(message);
 				break;
 				
+			case "get.results":
+				getResults(message); 
+				break;
+				
 			case "send.interrupt":
 				sendInterrupt(message);
 				break;
@@ -94,7 +98,7 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 				break;
 				
 			case "get.agents":
-				getAgents(message);
+				getAgents(message); 
 				break;
 			
 			default:
@@ -174,6 +178,27 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 	    });
 	}
 	
+	protected void getResults(Message<Object> message) {
+		/*
+		 * {
+		 * 	"payload": 
+		 * 		{
+		 * 		  "schema":"..."
+		 * 		}
+		 * }
+		 * */
+    	JsonObject toStorageMsg = new JsonObject()
+    		.put("action", "get_results_operation")
+    		.put("payload", ((JsonObject) message.body()));
+    			eb.send("dss.storage", toStorageMsg, reply -> {
+    				if (reply.succeeded()) {
+    					message.reply((String) reply.result().body());
+    				} else {
+    					message.reply("{}");
+    				}
+    			});
+	}
+	
 	protected void sendInterrupt(Message<Object> message) {
 		JsonObject payload = ((JsonObject) message.body()).getJsonObject("payload");
 		
@@ -203,7 +228,11 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 		}
 		
 		// send to GUI over eventbus
-		eb.send("post.result", resStr);
+		eb.send("client.result", resStr, reply -> {
+			if (reply.succeeded()) {
+				LOG.info("Result sent to GUI.");
+			}
+		});
 		
 		// send to storage over eventbus
 		JsonObject message = new JsonObject()
