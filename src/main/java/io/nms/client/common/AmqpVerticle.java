@@ -13,7 +13,6 @@ import io.vertx.amqp.AmqpConnection;
 import io.vertx.amqp.AmqpMessage;
 import io.vertx.amqp.AmqpReceiver;
 import io.vertx.core.Future;
-import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 
 public abstract class AmqpVerticle extends BaseClientVerticle {
@@ -25,16 +24,17 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 	protected void createAmqpConnection(String host, int port, Future<Void> promise) {
 		boolean isAmqp = !host.isEmpty() && (port > 0);
 		if (isAmqp) {
-			LOG.info("Connecting to messaging platform...");
+			//LOG.info("Connecting to messaging platform...");
 			AmqpClientOptions options = new AmqpClientOptions()
 				.setHost(host)
 				.setPort(port);
 			AmqpClient client = AmqpClient.create(options);
 			client.connect(ar -> {
 				if (ar.failed()) {
-					LOG.info("Unable to connect to the broker");
+					LOG.error("Unable to connect to the messaging platform", ar.cause());
 					promise.fail(ar.cause());
 				} else {
+					LOG.info("Connected to the messaging platform.");
 					connection = ar.result();
 					promise.complete();
 				}
@@ -56,7 +56,7 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 					if (clientName.isEmpty()) {
 						promise.fail("Authentication failed.");
 					} else {
-						LOG.info("Client: "+repJson.encodePrettily());
+						LOG.info("Client authenticated: "+repJson.encodePrettily());
 						promise.complete();
 					}
 				});
@@ -121,7 +121,6 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 				        }
 					});
 				});
-				/* topic name found in Capability...*/
 				connection.createSender(spec.getEndpoint()+"/specifications", sender -> {
 					if (sender.succeeded()) {
 						sender.result().send(AmqpMessage.create()
@@ -139,7 +138,7 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 		connection.createReceiver(rct.getEndpoint()+"/results",
 			done -> {
 				if (done.failed()) {
-					System.out.println("Unable to create receiver");
+					LOG.error("Unable to subscribe to results", done.cause());
 					promise.fail(done.cause());
 				} else {
 					AmqpReceiver receiver = done.result();
@@ -148,7 +147,7 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 				        .handler(msg -> {
 				        	processResult(Message.fromJsonString(msg.bodyAsString()));				  
 				        });
-				    LOG.info("Listening to Agent results.");
+				    LOG.info("Subscribed to results.");
 				    promise.complete();
 				}
 			});
@@ -203,8 +202,19 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 	}
 	
 	@Override
-	public void stop() {
-		super.stop();
+	public void stop(Future stopFuture) throws Exception {	
+		Future<Void> futStop = Future.future(promise -> {
+			try {
+				super.stop(promise);
+			} catch (Exception e) {
+				LOG.error("Error on stopping", e.getMessage());
+				promise.fail(e.getMessage());
+			}
+		});
+		futStop.setHandler(res -> {
+			LOG.info("AMQP connection closed.");
+			connection.close(stopFuture);
+		});
 	}
 
 }

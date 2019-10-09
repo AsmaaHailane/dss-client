@@ -71,8 +71,9 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 		vertx.createHttpServer().requestHandler(router::accept).listen(9000);
 
 		eb.consumer("client", message -> {
-			LOG.info("got EB message");
 			String action = message.headers().get("action");
+			JsonObject payload = ((JsonObject) message.body());
+			LOG.info("Eventbus message: "+action+ " | " +payload.encodePrettily());
 			
 			switch (action)
 			{
@@ -81,7 +82,6 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 				break;		
 
 			case "send.specification":
-				LOG.info("send.specification");
 				sendSpecification(message);
 				break;
 				
@@ -112,11 +112,11 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 		fut.setHandler(res -> {
 	        if (res.succeeded()) {
 	        	String caps = io.nms.messages.Message.toStringFromList(res.result());
-	        	LOG.info("Got Capabilities: "+caps);
 	        	JsonObject json = new JsonObject().put("capabilities", caps);
 	        	message.reply(json);	      
 	        } else {
-	        	message.reply("");
+	        	LOG.error("Failed to get Capabilities", res.cause());
+	        	message.reply(new JsonObject().put("capabilities", new JsonObject()));
 	        }
 		});
 	}
@@ -126,12 +126,13 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
     	req.put("action", "get_all_agents");
     	req.put("payload", new JsonObject());
     	Future<String> fut = Future
-    			.future(promise -> sendAdminReq(req, promise));
+    		.future(promise -> sendAdminReq(req, promise));
 		fut.setHandler(res -> {
 	        if (res.succeeded()) {
 	        	JsonObject r = new JsonObject(res.result());
 	        	message.reply(new JsonObject().put("agents", r.getJsonArray("payload")));
 	        } else {
+	        	LOG.error("Failed to get Agents", res.cause());
 	        	message.reply(new JsonObject().put("agents", new JsonObject()));
 	        }
 	    });
@@ -148,6 +149,7 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 	        	JsonObject r = new JsonObject(res.result());
 	        	message.reply(new JsonObject().put("clients", r.getJsonArray("payload")));
 	        } else {
+	        	LOG.error("Failed to get Clients", res.cause());
 	        	message.reply(new JsonObject().put("clients", new JsonObject()));
 	        }
 	    });
@@ -167,48 +169,50 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 		long stop = Instant.now().plusSeconds(duration).toEpochMilli();
 		String when = "now ... " + String.valueOf(stop) + " / " + period;
 		spec.setWhen(when);
-		LOG.info("Send Specification: "+io.nms.messages.Message.toJsonString(spec, false));
+		LOG.info("Send Specification: "+io.nms.messages.Message.toJsonString(spec, true));
 		Future<Receipt> fut = Future.future(rct -> sendSpecification(spec, rct));
 		fut.setHandler(res -> {
 	        if (res.succeeded()) {
 	        	message.reply(io.nms.messages.Message.toJsonString(res.result(), false));	        	
 	        } else {
-	        	message.reply("");
+	        	LOG.error("Failed to get Receipt", res.cause());
+	        	message.reply(new JsonObject().put("receipt", new JsonObject()));
+	        	//message.reply("");
 	        }
 	    });
 	}
 	
 	protected void getResults(Message<Object> message) {
 		JsonObject payload = ((JsonObject) message.body());
-		String strRct = payload.getString("receipt");
-		Receipt rct = (Receipt) io.nms.messages.Message.fromJsonString(strRct);
+		//String schema = payload.getString("schema");
+		
     	JsonObject toStorageMsg = new JsonObject()
     		.put("action", "get_results_operation")
-    		.put("payload", rct.getSchema());
-    			eb.send("dss.storage", toStorageMsg, reply -> {
-    				if (reply.succeeded()) {
-    					message.reply((String) reply.result().body());
-    				} else {
-    					message.reply("{}");
-    				}
-    			});
+    		.put("payload", payload);
+    	eb.send("dss.storage", toStorageMsg, reply -> {
+    		if (reply.succeeded()) {
+    			message.reply((String) reply.result().body());
+    		} else {
+    			LOG.error("Failed to get Results", reply.cause());
+	        	message.reply(new JsonObject().put("results", new JsonObject()));
+    		}
+    	});
 	}
 	
 	protected void sendInterrupt(Message<Object> message) {
 		JsonObject payload = ((JsonObject) message.body()).getJsonObject("payload");
-		
 		Receipt receipt = (Receipt) io.nms.messages.Message.fromJsonString(payload.getString("receipt"));
-		
 		Interrupt interrupt = new Interrupt(receipt);
 		String taskId = receipt.getContent("task.id");
 		interrupt.setParameter("task.id", taskId);
-		LOG.info("Send Interrupt: "+io.nms.messages.Message.toJsonString(interrupt, false));
+		LOG.info("Send Interrupt: "+io.nms.messages.Message.toJsonString(interrupt, true));
 		Future<Receipt> fut = Future.future(rct -> sendInterrupt(interrupt, rct));
 		fut.setHandler(res -> {
 	        if (res.succeeded()) {	    	 
 	        	message.reply(io.nms.messages.Message.toJsonString(res.result(), false));	        	
 	        } else {
-	        	message.reply("");
+	        	LOG.error("Failed to get Receipt", res.cause());
+	        	message.reply(new JsonObject().put("receipt", new JsonObject()));
 	        }
 	    });
 	}
@@ -245,7 +249,8 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 	}
 	
 	@Override
-	public void stop() {
+	public void stop(Future stopFuture) throws Exception {
+		super.stop(stopFuture);
 	}
 	
 }

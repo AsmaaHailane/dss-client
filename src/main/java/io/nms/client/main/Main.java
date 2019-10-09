@@ -26,13 +26,13 @@ public class Main {
 	
 	public static void main(String[] args) {
 		if (args.length < 1) {
-			LOG.error("Configuration file required.");
-			System.exit(1);
+			LOG.error("No configuration file found.");
+			System.exit(1); 
 		}
 		String configFile = args[0];
 		JSONObject configuration = new JSONObject();
 		try {
-			LOG.info("Reading configuration file...");
+			LOG.info("Reading configuration file.");
 			configuration = (JSONObject) new JSONParser().parse(new FileReader(configFile));
 		} catch (IOException e) {
 			LOG.error(e.getMessage());
@@ -53,20 +53,19 @@ public class Main {
 			.setConfig(vertConfig),
 			res -> {
 				if (res.failed()) {
-					LOG.info("Failed to deploy communication module.");
+					LOG.error("Failed to deploy communication module.", res.cause());
 					commFut.fail(res.cause());
 				} else {
 					commFut.complete();
 				}
 			});
 		
-		// storage verticle
 		LOG.info("Deploying storage module.");
 		String[] deployId = {""};
 		final Future<Void> storagefut = Future.future();
 		vertx.deployVerticle(StorageVerticle.class.getName(), res -> {
 			if (res.failed()) {
-				LOG.error("Failed to deploy storage module");
+				LOG.error("Failed to deploy storage module", res.cause());
 				storagefut.fail(res.cause());
 			} else {
 				deployId[0] = res.result();
@@ -82,10 +81,38 @@ public class Main {
 				Timer timer = new Timer(true);
 				timer.schedule((TimerTask) cli, 0);
 			} else {
-				LOG.error(res.cause().getMessage());
+				LOG.error("Error on starting client", res.cause().getMessage());
 				System.exit(1);
 			}
 		});
+		
+		Runtime.getRuntime().addShutdownHook(new Thread()
+        {
+            @Override
+            public void run()
+            {
+            	Future<Void> futCommStop = Future.future(promise -> {
+        			try {
+        				vClient.stop(promise);
+        			} catch (Exception e) {        				
+        				promise.fail(e.getMessage());
+        			}
+        		});
+            	Future<Void> futStorStop = Future.future(promise -> {        		
+        			vertx.undeploy(deployId[0], promise);
+        		});
+            	CompositeFuture.all(futCommStop, futStorStop)
+        		.setHandler(res -> {
+        			if (res.succeeded()) {
+        				LOG.info("Client successfully terminated.");
+        				System.exit(0);
+        			} else {
+        				LOG.error("Client terminated with errors. ", res.cause());
+        				System.exit(1);
+        			}
+        		});            	
+            }
+        });
 	}
 }
   

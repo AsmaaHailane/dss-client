@@ -28,8 +28,9 @@ public class AmqpClientVerticle extends AmqpVerticle {
 	}
 	
 	@Override
-	public void stop() {
-		super.stop();
-		/* TODO: Logout */
-	}
+	public void stop(Future stopFuture) throws Exception {
+		LOG.info("Closing Client.");
+		//LOG.info("Client logged out.");
+		super.stop(stopFuture);
+	} 
 }
