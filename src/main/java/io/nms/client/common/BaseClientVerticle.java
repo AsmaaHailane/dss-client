@@ -62,7 +62,8 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 		allowedHeaders.add("X-PINGARUNER");
 
 		CorsHandler corsHandler = CorsHandler.create("http://10.11.200.213:8080").allowedHeaders(allowedHeaders)
-				.allowCredentials(false);
+				.allowCredentials(true);
+		
 		Arrays.asList(HttpMethod.values()).stream().forEach(method -> corsHandler.allowedMethod(method));
 		router.route().handler(corsHandler);
 
