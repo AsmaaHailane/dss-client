@@ -58,6 +58,22 @@ public class Console extends TimerTask implements ResultListener {
 			        System.out.println(">");
 			    });
 	        }
+	    	if ("stats".equals(opt[0])) {
+	        	JsonObject req = new JsonObject();
+	        	req.put("action", "get_stats");
+	        	req.put("payload", new JsonObject());
+	        	Future<String> fut = Future
+	        			.future(promise -> verticle.sendAdminReq(req, promise));
+				fut.setHandler(res -> {
+			        if (res.succeeded()) {
+			        	JsonObject r = new JsonObject(res.result());
+			        	System.out.println(r.encodePrettily());
+			        } else {
+			        	System.out.println("Error: "+res.cause());
+			        }
+			        System.out.println(">");
+			    });
+	        }
 	    	if ("agents".equals(opt[0])) {
 	        	System.out.println("Get agents");
 	        	JsonObject req = new JsonObject();

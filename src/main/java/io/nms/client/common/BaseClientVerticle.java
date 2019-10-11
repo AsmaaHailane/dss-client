@@ -101,6 +101,10 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 			case "get.agents":
 				getAgents(message); 
 				break;
+				
+			case "get.stats":
+				getStats(message); 
+				break;
 			
 			default:
 				message.reply("");
@@ -243,6 +247,23 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 					LOG.info("Result stored.");
 				}
 			});
+	}
+	
+	protected void getStats(Message<Object> message) {
+		JsonObject req = new JsonObject();
+    	req.put("action", "get_stats");
+    	req.put("payload", new JsonObject());
+    	Future<String> fut = Future
+    			.future(promise -> sendAdminReq(req, promise));
+		fut.setHandler(res -> {
+	        if (res.succeeded()) {
+	        	JsonObject r = new JsonObject(res.result());
+	        	message.reply(new JsonObject().put("stats", r));
+	        } else {
+	        	LOG.error("Failed to get Clients", res.cause());
+	        	message.reply(new JsonObject().put("stats", new JsonObject()));
+	        }
+	    });
 	}
 	  
 	public void registerResultListener(ResultListener rl) {
