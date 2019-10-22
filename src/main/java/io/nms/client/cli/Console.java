@@ -153,12 +153,12 @@ public class Console extends TimerTask implements ResultListener {
 		Specification spec = new Specification(cap);
 		
 		int pastS = 0;
-		System.out.print("Past (seconds): ");
+		System.out.print("Start after (seconds): ");
 		pastS = input.nextInt();
 		input.nextLine();
 		
 		int futureS = 0;
-		System.out.print("future (seconds): ");
+		System.out.print("Stop after (seconds): ");
 		futureS = input.nextInt();
 		input.nextLine();
 		
@@ -167,7 +167,7 @@ public class Console extends TimerTask implements ResultListener {
 		period = input.nextInt();
 		input.nextLine();
 		
-		long start = Instant.now().minusSeconds(pastS).toEpochMilli();
+		long start = Instant.now().plusSeconds(pastS).toEpochMilli();
 		long stop = Instant.now().plusSeconds(futureS).toEpochMilli();
 		
 		String startS = "now";
