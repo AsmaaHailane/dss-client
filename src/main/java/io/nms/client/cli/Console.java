@@ -58,22 +58,6 @@ public class Console extends TimerTask implements ResultListener {
 			        System.out.println(">");
 			    });
 	        }
-	    	if ("stats".equals(opt[0])) {
-	        	JsonObject req = new JsonObject();
-	        	req.put("action", "get_stats");
-	        	req.put("payload", new JsonObject());
-	        	Future<String> fut = Future
-	        			.future(promise -> verticle.sendAdminReq(req, promise));
-				fut.setHandler(res -> {
-			        if (res.succeeded()) {
-			        	JsonObject r = new JsonObject(res.result());
-			        	System.out.println(r.encodePrettily());
-			        } else {
-			        	System.out.println("Error: "+res.cause());
-			        }
-			        System.out.println(">");
-			    });
-	        }
 	    	if ("agents".equals(opt[0])) {
 	        	System.out.println("Get agents");
 	        	JsonObject req = new JsonObject();
@@ -168,17 +152,30 @@ public class Console extends TimerTask implements ResultListener {
 		Scanner input = new Scanner(System.in);
 		Specification spec = new Specification(cap);
 		
-		int duration = 0;
-		System.out.print("Duration (seconds): ");
-		duration = input.nextInt();
+		int pastS = 0;
+		System.out.print("Past (seconds): ");
+		pastS = input.nextInt();
 		input.nextLine();
-		long stop = Instant.now().plusSeconds(duration).toEpochMilli();
+		
+		int futureS = 0;
+		System.out.print("future (seconds): ");
+		futureS = input.nextInt();
+		input.nextLine();
 		
 		int period = 0;
 		System.out.print("Period (milliseconds): ");
 		period = input.nextInt();
 		input.nextLine();
-		String when = "now ... " + String.valueOf(stop) + " / " + period;
+		
+		long start = Instant.now().minusSeconds(pastS).toEpochMilli();
+		long stop = Instant.now().plusSeconds(futureS).toEpochMilli();
+		
+		String startS = "now";
+		if (pastS != 0) {
+			startS = String.valueOf(start);
+		}
+		String when = startS + " ... " + String.valueOf(stop) + " / " + period;
+		
 		spec.setWhen(when);
 		
 		/*for (String key : cap.getParameters().keySet()) {

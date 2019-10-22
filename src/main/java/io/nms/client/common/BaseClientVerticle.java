@@ -205,7 +205,7 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 	}
 	
 	protected void sendInterrupt(Message<Object> message) {
-		JsonObject payload = ((JsonObject) message.body()).getJsonObject("payload");
+		JsonObject payload = ((JsonObject) message.body());
 		Receipt receipt = (Receipt) io.nms.messages.Message.fromJsonString(payload.getString("receipt"));
 		Interrupt interrupt = new Interrupt(receipt);
 		String taskId = receipt.getContent("task.id");
@@ -217,7 +217,7 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 	        	message.reply(io.nms.messages.Message.toJsonString(res.result(), false));	        	
 	        } else {
 	        	LOG.error("Failed to get Receipt", res.cause());
-	        	message.reply(new JsonObject().put("receipt", new JsonObject()));
+	        	message.reply(new JsonObject().encode());
 	        }
 	    });
 	}
