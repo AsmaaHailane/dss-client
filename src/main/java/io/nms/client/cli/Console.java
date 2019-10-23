@@ -148,7 +148,7 @@ public class Console extends TimerTask implements ResultListener {
 	}
 	
 	private void createAndSendSpecification(Capability cap) {
-		System.out.println("Create Specification (Parameters not supported yet)");
+		System.out.println("Create Specification for "+cap.getName());
 		Scanner input = new Scanner(System.in);
 		Specification spec = new Specification(cap);
 		
@@ -167,6 +167,13 @@ public class Console extends TimerTask implements ResultListener {
 		period = input.nextInt();
 		input.nextLine();
 		
+		for (String key : cap.getParameters().keySet()) {
+			System.out.print(key+" = ");
+			String value = input.nextLine();
+			spec.setParameter(key, value);
+			System.out.println();
+		}
+		
 		long start = Instant.now().plusSeconds(pastS).toEpochMilli();
 		long stop = Instant.now().plusSeconds(futureS).toEpochMilli();
 		
@@ -177,13 +184,6 @@ public class Console extends TimerTask implements ResultListener {
 		String when = startS + " ... " + String.valueOf(stop) + " / " + period;
 		
 		spec.setWhen(when);
-		
-		/*for (String key : cap.getParameters().keySet()) {
-			System.out.print("Enter value of param" +key+": ");
-			String value = input.nextLine();
-			spec.setParameter(key, value);
-			System.out.println();
-		}*/
 		
 		System.out.println("Specification created:\n"+Message.toJsonString(spec, true));
 		System.out.println("Send Specification y/n?");
@@ -196,7 +196,7 @@ public class Console extends TimerTask implements ResultListener {
 		        if (res.succeeded()) {
 		        	currentRcpt = res.result();
 		        	printReceipt(currentRcpt);	        	
-		        } 	  
+		        }
 		    });
 		}
 	}

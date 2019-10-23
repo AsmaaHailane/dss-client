@@ -166,14 +166,14 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 		JsonObject payload = ((JsonObject) message.body());
 		
 		String strCap = payload.getString("capability");
-		int duration = Integer.valueOf(payload.getString("duration"));
-		int period = Integer.valueOf(payload.getString("period"));
+		//int duration = Integer.valueOf(payload.getString("duration"));
+		//int period = Integer.valueOf(payload.getString("period"));
 		Capability cap = (Capability) io.nms.messages.Message.fromJsonString(strCap);
 		Specification spec = new Specification(cap);
 		
-		long stop = Instant.now().plusSeconds(duration).toEpochMilli();
-		String when = "now ... " + String.valueOf(stop) + " / " + period;
-		spec.setWhen(when);
+		//long stop = Instant.now().plusSeconds(duration).toEpochMilli();
+		//String when = "now ... " + String.valueOf(stop) + " / " + period;
+		//spec.setWhen(when);
 		LOG.info("Send Specification: "+io.nms.messages.Message.toJsonString(spec, true));
 		Future<Receipt> fut = Future.future(rct -> sendSpecification(spec, rct));
 		fut.setHandler(res -> {
