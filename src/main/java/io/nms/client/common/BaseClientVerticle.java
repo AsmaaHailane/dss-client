@@ -1,7 +1,7 @@
 package io.nms.client.common;
 
-import java.time.Instant;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -37,6 +37,8 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 	public abstract void sendSpecification(Specification spec, Future<Receipt> prom);
 	public abstract void sendInterrupt(Interrupt itr, Future<Receipt> prom); 
 	public abstract void sendAdminReq(JsonObject req, Future<String> promise);
+	
+	protected HashMap<String, Receipt> activeSpecs = new HashMap<String, Receipt>();
 	
 	private static final String ADDRESS = "client.*";
 	
@@ -162,23 +164,17 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 	
 	
 	protected void sendSpecification(Message<Object> message) {
-		//LOG.info(((JsonObject)message.body()).encodePrettily());
 		JsonObject payload = ((JsonObject) message.body());
-		
 		String strCap = payload.getString("capability");
-		//int duration = Integer.valueOf(payload.getString("duration"));
-		//int period = Integer.valueOf(payload.getString("period"));
 		Capability cap = (Capability) io.nms.messages.Message.fromJsonString(strCap);
 		Specification spec = new Specification(cap);
-		
-		//long stop = Instant.now().plusSeconds(duration).toEpochMilli();
-		//String when = "now ... " + String.valueOf(stop) + " / " + period;
-		//spec.setWhen(when);
 		LOG.info("Send Specification: "+io.nms.messages.Message.toJsonString(spec, true));
 		Future<Receipt> fut = Future.future(rct -> sendSpecification(spec, rct));
 		fut.setHandler(res -> {
 	        if (res.succeeded()) {
-	        	message.reply(io.nms.messages.Message.toJsonString(res.result(), false));	        	
+	        	Receipt rct = res.result();
+	        	message.reply(io.nms.messages.Message.toJsonString(rct, false));
+	        	activeSpecs.put(rct.getSchema(), rct);
 	        } else {
 	        	LOG.error("Failed to get Receipt", res.cause());
 	        	message.reply(new JsonObject().put("receipt", new JsonObject()));
@@ -189,8 +185,6 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 	
 	protected void getResults(Message<Object> message) {
 		JsonObject payload = ((JsonObject) message.body());
-		//String schema = payload.getString("schema");
-		
     	JsonObject toStorageMsg = new JsonObject()
     		.put("action", "get_results_operation")
     		.put("payload", payload);
@@ -206,47 +200,47 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 	
 	protected void sendInterrupt(Message<Object> message) {
 		JsonObject payload = ((JsonObject) message.body());
-		Receipt receipt = (Receipt) io.nms.messages.Message.fromJsonString(payload.getString("receipt"));
-		Interrupt interrupt = new Interrupt(receipt);
-		String taskId = receipt.getContent("task.id");
-		interrupt.setParameter("task.id", taskId);
-		LOG.info("Send Interrupt: "+io.nms.messages.Message.toJsonString(interrupt, true));
-		Future<Receipt> fut = Future.future(rct -> sendInterrupt(interrupt, rct));
-		fut.setHandler(res -> {
-	        if (res.succeeded()) {	    	 
-	        	message.reply(io.nms.messages.Message.toJsonString(res.result(), false));	        	
-	        } else {
-	        	LOG.error("Failed to get Receipt", res.cause());
-	        	message.reply(new JsonObject().encode());
-	        }
-	    });
+		String rctSchema = payload.getString("receipt.schema");
+		if (activeSpecs.containsKey(rctSchema)) {
+			Interrupt interrupt = new Interrupt(activeSpecs.get(rctSchema));
+			LOG.info("Send Interrupt: "+io.nms.messages.Message.toJsonString(interrupt, true));
+			Future<Receipt> fut = Future.future(rct -> sendInterrupt(interrupt, rct));
+			fut.setHandler(res -> {
+				if (res.succeeded()) {
+					activeSpecs.remove(rctSchema);
+					message.reply(io.nms.messages.Message.toJsonString(res.result(), false));	        	
+				} else {
+					LOG.error("Failed to get Receipt", res.cause());
+					message.reply(new JsonObject().encode());
+				}
+			});
+		}
 	}
 	
 	protected void processResult(io.nms.messages.Message res) {
-		String resStr = io.nms.messages.Message.toJsonString(res, false);
-		LOG.info("Got Result: "+resStr);
+		// filter results by schema
+		if (activeSpecs.containsKey(res.getSchema())) {
+			String resStr = io.nms.messages.Message.toJsonString(res, false);
+			LOG.info("Got Result: "+resStr);
 		
-		// send to Console
-		if (this.rListener != null) {
-			this.rListener.onResult(res);
-		}
-		
-		// send to GUI over eventbus
-		eb.send("client.result", resStr, reply -> {
-			if (reply.succeeded()) {
-				LOG.info("Result sent to GUI.");
+			// send to Console
+			if (this.rListener != null) {
+				this.rListener.onResult(res);
 			}
-		});
 		
-		// send to storage over eventbus
-		JsonObject message = new JsonObject()
-			.put("action", "add_result")
-			.put("payload", new JsonObject(resStr));
+			// send to GUI over eventbus
+			eb.send("client.result", resStr);
+		
+			// send to storage over eventbus
+			JsonObject message = new JsonObject()
+				.put("action", "add_result")
+				.put("payload", new JsonObject(resStr));
 			eb.send("dss.storage", message, reply -> {
 				if (reply.succeeded()) {
 					LOG.info("Result stored.");
 				}
 			});
+		}
 	}
 	
 	protected void getStats(Message<Object> message) {

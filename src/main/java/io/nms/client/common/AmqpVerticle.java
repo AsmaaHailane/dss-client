@@ -112,14 +112,19 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 				String replyToAddress = replyReceiver.result().address();
 				replyReceiver.result().handler(msg -> {
 					Receipt rct = (Receipt) Message.fromJsonString(msg.bodyAsString());
-					Future<Void> fut = Future.future(p -> subscribeToResults(rct, p));
-					fut.setHandler(res -> {
-				        if (res.failed()) {
-				        	promise.fail(res.cause());
-				        } else {				
-				        	promise.complete(rct);					         
-				        }
-					});
+					if (rct.getErrors().isEmpty()) {
+						Future<Void> fut = Future.future(p -> subscribeToResults(rct, p));
+						fut.setHandler(res -> {
+					        if (res.failed()) {
+					        	promise.fail(res.cause());
+					        } else {				
+					        	promise.complete(rct);					         
+					        }
+						});
+					} else {
+						promise.complete(rct);
+					}
+					
 				});
 				connection.createSender(spec.getEndpoint()+"/specifications", sender -> {
 					if (sender.succeeded()) {
@@ -135,7 +140,7 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 	
 	/* Client is subscriber. pub-sub for Client to get Results. */
 	protected void subscribeToResults(Receipt rct, Future<Void> promise) {
-		connection.createReceiver(rct.getEndpoint()+"/results",
+		connection.createReceiver(rct.getEndpoint()+"/results/"+rct.getClientRole(),
 			done -> {
 				if (done.failed()) {
 					LOG.error("Unable to subscribe to results", done.cause());
