@@ -113,6 +113,7 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 				replyReceiver.result().handler(msg -> {
 					Receipt rct = (Receipt) Message.fromJsonString(msg.bodyAsString());
 					if (rct.getErrors().isEmpty()) {
+						activeSpecs.put(rct.getSchema(), rct);				
 						Future<Void> fut = Future.future(p -> subscribeToResults(rct, p));
 						fut.setHandler(res -> {
 					        if (res.failed()) {
@@ -122,9 +123,8 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 					        }
 						});
 					} else {
-						promise.complete(rct);
+						promise.fail("");
 					}
-					
 				});
 				connection.createSender(spec.getEndpoint()+"/specifications", sender -> {
 					if (sender.succeeded()) {

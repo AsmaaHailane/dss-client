@@ -168,13 +168,11 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 		String strCap = payload.getString("capability");
 		Capability cap = (Capability) io.nms.messages.Message.fromJsonString(strCap);
 		Specification spec = new Specification(cap);
-		LOG.info("Send Specification: "+io.nms.messages.Message.toJsonString(spec, true));
+		//LOG.info("Send Specification: "+io.nms.messages.Message.toJsonString(spec, true));
 		Future<Receipt> fut = Future.future(rct -> sendSpecification(spec, rct));
 		fut.setHandler(res -> {
 	        if (res.succeeded()) {
-	        	Receipt rct = res.result();
-	        	message.reply(io.nms.messages.Message.toJsonString(rct, false));
-	        	activeSpecs.put(rct.getSchema(), rct);
+	        	message.reply(io.nms.messages.Message.toJsonString(res.result(), false));
 	        } else {
 	        	LOG.error("Failed to get Receipt", res.cause());
 	        	message.reply(new JsonObject().put("receipt", new JsonObject()));

@@ -121,8 +121,8 @@ public class Console extends TimerTask implements ResultListener {
 	        if (opt[0].isEmpty() && (currentRcpt != null)) {
 	        	System.out.println("Interrupt Specification...");
 	    		Interrupt interrupt = new Interrupt(currentRcpt);
-	    		String taskId = currentRcpt.getContent("task.id");
-	    		interrupt.setParameter("task.id", taskId);
+	    		//String taskId = currentRcpt.getContent("task.id");
+	    		//interrupt.setParameter("task.id", taskId);
 	    		interrupt.setTimestampNow();
 	    		Future<Receipt> fut = Future.future(rct -> verticle.sendInterrupt(interrupt, rct));
 	    		fut.setHandler(res -> {
