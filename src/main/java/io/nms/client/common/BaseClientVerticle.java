@@ -31,6 +31,9 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 	protected Logger LOG = LoggerFactory.getLogger(BaseClientVerticle.class);
 	protected ResultListener rListener = null;
 	
+	protected String clientName = "";
+	protected String clientRole = "";
+	
 	protected abstract void requestAuthentication(String uname, String pass, Future<Void> prom);
 	protected abstract void subscribeToResults(Receipt rct, Future<Void> prom);
 	public abstract void discoverCapabilities(Future<List<Capability>> prom);
@@ -80,6 +83,10 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 			
 			switch (action)
 			{
+			case "get.clientId":
+				getClientId(message);
+				break;	
+				
 			case "get.capabilities":
 				getCapabilities(message);
 				break;		
@@ -112,6 +119,13 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 				message.reply("");
 			}
 		});
+	}
+	
+	protected void getClientId(Message<Object> message) {
+		JsonObject clientId = new JsonObject()
+			.put("name", clientName)
+	        .put("role", clientRole);
+		message.reply(new JsonObject().put("client", clientId));	      
 	}
 	
 	protected void getCapabilities(Message<Object> message) {

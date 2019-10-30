@@ -16,8 +16,6 @@ import io.vertx.core.Future;
 import io.vertx.core.json.JsonObject;
 
 public abstract class AmqpVerticle extends BaseClientVerticle {
-	protected String clientName = "";
-	protected String clientRole = "";
 	private AmqpConnection connection = null;
 	
 	/* Create AMQP connection to the broker */
