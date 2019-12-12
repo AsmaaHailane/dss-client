@@ -189,8 +189,7 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 	        	message.reply(io.nms.messages.Message.toJsonString(res.result(), false));
 	        } else {
 	        	LOG.error("Failed to get Receipt", res.cause());
-	        	message.reply(new JsonObject().put("receipt", new JsonObject()));
-	        	//message.reply("");
+	        	message.reply("");
 	        }
 	    });
 	}
@@ -223,7 +222,7 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 					message.reply(io.nms.messages.Message.toJsonString(res.result(), false));	        	
 				} else {
 					LOG.error("Failed to get Receipt", res.cause());
-					message.reply(new JsonObject().encode());
+					message.reply("");
 				}
 			});
 		}

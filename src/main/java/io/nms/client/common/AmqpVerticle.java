@@ -103,7 +103,7 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 	}
 	
 	/* Client is sender. req-rep to issue Spec. */
-	public void sendSpecification(Specification spec, Future<Receipt> promise) {
+	public void sendSpecification(Specification spec, Future<Receipt> promise) { 
 		spec.setToken(clientName);
 		connection.createDynamicReceiver(replyReceiver -> {
 			if (replyReceiver.succeeded()) {
@@ -121,7 +121,7 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 					        }
 						});
 					} else {
-						promise.fail("");
+						promise.complete(rct);
 					}
 				});
 				connection.createSender(spec.getEndpoint()+"/specifications", sender -> {
@@ -132,7 +132,7 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 						  .withBody(Message.toJsonString(spec, false)).build());
 					}
 				});
-			}
+			} // else: cannot send spec...
 		});
 	}
 	
