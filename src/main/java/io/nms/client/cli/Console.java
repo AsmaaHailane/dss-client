@@ -104,6 +104,13 @@ public class Console extends TimerTask implements ResultListener {
 			        System.out.println(">");
 			    });
 	        }
+	        
+	        // manage results
+	        if ("res".equals(opt[0])) {
+	        	System.out.println("Get all operations...");
+	        	System.out.println(">");
+	        }
+	        
 	        if ("spec".equals(opt[0])) {
 	        	if (capabilities.isEmpty()) {
 	        		System.out.println("No Capabilities.");
@@ -112,7 +119,7 @@ public class Console extends TimerTask implements ResultListener {
 	        		System.out.println("Enter Capability No.");
 	        		int c = Integer.parseInt(input.nextLine());
 	        		if ((c >= 0) && (c < capabilities.size())) {
-	        			createAndSendSpecification(capabilities.get(c));
+	        			createAndSendSpecification(capabilities.get(c)); 
 	        		} else {
 	        			System.out.println("Unknown Capability No.");
 	        		}

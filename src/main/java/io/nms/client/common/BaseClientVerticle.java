@@ -19,6 +19,7 @@ import io.vertx.core.Future;
 import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.eventbus.Message;
 import io.vertx.core.http.HttpMethod;
+import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.handler.CorsHandler;
@@ -76,10 +77,11 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 		
 		vertx.createHttpServer().requestHandler(router::accept).listen(9000);
 
+		/* make API... */
 		eb.consumer("client", message -> {
 			String action = message.headers().get("action");
-			JsonObject payload = ((JsonObject) message.body());
-			LOG.info("Eventbus message: "+action+ " | " +payload.encodePrettily());
+			//JsonObject payload = ((JsonObject) message.body());
+			//LOG.info("Eventbus message: "+action+ " | " +payload.encodePrettily());
 			
 			switch (action)
 			{
@@ -94,11 +96,26 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 			case "send.specification":
 				sendSpecification(message);
 				break;
-				
-			case "get.results":
-				getResults(message); 
+			
+			// result read/delete
+			case "get_all_operations":
+				toResultsStorageAPI(message); 
+				break;
+			case "get_results_operation":
+				toResultsStorageAPI(message); 
+				break;
+			case "get_result_id":
+				toResultStorageAPI(message); 
 				break;
 				
+			case "del_results_operation":
+				toResultStorageAPI(message); 
+				break;
+			case "del_result_id":
+				toResultStorageAPI(message); 
+				break;
+				
+			// interrupt
 			case "send.interrupt":
 				sendInterrupt(message);
 				break;
@@ -194,7 +211,40 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 	    });
 	}
 	
-	protected void getResults(Message<Object> message) {
+	/*------------------------ manage results: eventbus API ------------------------------------*/
+	protected void toResultsStorageAPI(Message<Object> message) {
+		// to customMessage format...
+    	JsonObject toStorageMsg = new JsonObject()
+    		.put("action", message.headers().get("action"))
+    		.put("payload", (JsonObject) message.body());
+    	eb.send("dss.storage", toStorageMsg, reply -> {
+    		if (reply.succeeded()) {
+    			LOG.info( ((JsonArray)reply.result().body()).encodePrettily());
+    			message.reply((JsonArray)reply.result().body());
+    		} else {
+    			LOG.error("get_all_operations failed.", reply.cause());
+	        	message.reply(new JsonArray());
+    		}
+    	});
+	}
+	
+	protected void toResultStorageAPI(Message<Object> message) {
+		// to customMessage format...
+    	JsonObject toStorageMsg = new JsonObject()
+    		.put("action", message.headers().get("action"))
+    		.put("payload", (JsonObject) message.body());
+    	eb.send("dss.storage", toStorageMsg, reply -> {
+    		if (reply.succeeded()) {
+    			message.reply((JsonObject)reply.result().body());
+    			//LOG.info(((JsonObject)reply.result()).encodePrettily());
+    		} else {
+    			LOG.error("get_all_operations failed.", reply.cause());
+	        	message.reply(new JsonObject());
+    		}
+    	});
+	}
+	
+	/*protected void getResultsByOperation(Message<Object> message) {
 		JsonObject payload = ((JsonObject) message.body());
     	JsonObject toStorageMsg = new JsonObject()
     		.put("action", "get_results_operation")
@@ -203,11 +253,12 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
     		if (reply.succeeded()) {
     			message.reply((String) reply.result().body());
     		} else {
-    			LOG.error("Failed to get Results", reply.cause());
-	        	message.reply(new JsonObject().put("results", new JsonObject()));
+    			LOG.error("get_results_by_operation failed", reply.cause());
+	        	message.reply("");
     		}
     	});
-	}
+	}*/
+	/*----------------------------------------------------------------------------*/
 	
 	protected void sendInterrupt(Message<Object> message) {
 		JsonObject payload = ((JsonObject) message.body());

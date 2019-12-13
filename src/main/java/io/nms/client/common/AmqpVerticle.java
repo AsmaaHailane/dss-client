@@ -179,7 +179,7 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 	/* Client is sender. req-rep to send Admin requests. 
 	 * json request is set by caller; console, GUI.
 	 * */
-	public void sendAdminReq(JsonObject req, Future<String> promise) {
+	public void sendAdminReq(JsonObject req, Future<String> promise) { 
 		//LOG.info("sending admin req: "+req.encodePrettily());
 		connection.createDynamicReceiver(replyReceiver -> {
 			if (replyReceiver.succeeded()) {
