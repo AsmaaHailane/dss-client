@@ -80,7 +80,7 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 	}
 	
 	/* Client is sender. req-rep to retrieve Caps. */
-	public void discoverCapabilities(Future<List<Capability>> promise) {
+	protected void discoverCapabilities(Future<List<Capability>> promise) {
 		connection.createDynamicReceiver(replyReceiver -> {
 			if (replyReceiver.succeeded()) {
 				String replyToAddress = replyReceiver.result().address();
@@ -103,7 +103,7 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 	}
 	
 	/* Client is sender. req-rep to issue Spec. */
-	public void sendSpecification(Specification spec, Future<Receipt> promise) { 
+	protected void sendSpecification(Specification spec, Future<Receipt> promise) { 
 		spec.setToken(clientName);
 		connection.createDynamicReceiver(replyReceiver -> {
 			if (replyReceiver.succeeded()) {
@@ -155,9 +155,9 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 				}
 			});
 	}
-	
+
 	/* Client is sender. req-rep to retrieve Caps. */
-	public void sendInterrupt(Interrupt itr, Future<Receipt> promise) {
+	protected void sendInterrupt(Interrupt itr, Future<Receipt> promise) {
 		connection.createDynamicReceiver(replyReceiver -> {
 			if (replyReceiver.succeeded()) {
 				String replyToAddress = replyReceiver.result().address();
@@ -179,7 +179,7 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 	/* Client is sender. req-rep to send Admin requests. 
 	 * json request is set by caller; console, GUI.
 	 * */
-	public void sendAdminReq(JsonObject req, Future<String> promise) { 
+	protected void sendAdminReq(JsonObject req, Future<String> promise) { 
 		//LOG.info("sending admin req: "+req.encodePrettily());
 		connection.createDynamicReceiver(replyReceiver -> {
 			if (replyReceiver.succeeded()) {

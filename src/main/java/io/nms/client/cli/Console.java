@@ -1,22 +1,103 @@
 package io.nms.client.cli;
 
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Scanner;
-import java.util.TimerTask;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 
-import io.nms.client.common.AmqpClientVerticle;
-import io.nms.messages.Capability;
-import io.nms.messages.Interrupt;
-import io.nms.messages.Message;
-import io.nms.messages.Receipt;
-import io.nms.messages.Specification;
+import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
+import io.vertx.core.eventbus.EventBus;
+import io.vertx.core.http.HttpMethod;
 import io.vertx.core.json.JsonObject;
+import io.vertx.core.logging.Logger;
+import io.vertx.core.logging.LoggerFactory;
+import io.vertx.ext.web.Router;
+import io.vertx.ext.web.RoutingContext;
+import io.vertx.ext.web.handler.BodyHandler;
+import io.vertx.ext.web.handler.CorsHandler;
+import io.vertx.ext.web.handler.sockjs.BridgeOptions;
+import io.vertx.ext.web.handler.sockjs.PermittedOptions;
+import io.vertx.ext.web.handler.sockjs.SockJSHandler;
 
-public class Console extends TimerTask implements ResultListener {
-	private static Console instance = null;
+public class Console extends AbstractVerticle {
+	
+	private static final Logger LOG = LoggerFactory.getLogger(Console.class);
+	private EventBus eb = null;
+	private int port = 8000;
+	private static final String ADDRESS = "nms.*";
+	
+	@Override
+	public void start(Future<Void> fut) {
+		eb = vertx.eventBus();
+		
+		Router router = Router.router(vertx);
+		
+		// eventbus socket
+		SockJSHandler sockJSHandler = SockJSHandler.create(vertx);
+		BridgeOptions bridgeOptions = new BridgeOptions()
+				.addInboundPermitted(new PermittedOptions().setAddressRegex(ADDRESS))
+				.addOutboundPermitted(new PermittedOptions().setAddressRegex(ADDRESS));
+		sockJSHandler.bridge(bridgeOptions);
+
+		Set<String> allowedHeaders = new HashSet<>();
+		allowedHeaders.add("x-requested-with");
+		allowedHeaders.add("Access-Control-Allow-Origin");
+		allowedHeaders.add("origin");
+		allowedHeaders.add("Content-Type");
+		allowedHeaders.add("accept");
+		allowedHeaders.add("X-PINGARUNER");
+
+		CorsHandler corsHandler = CorsHandler.create("http://10.11.200.213:8080").allowedHeaders(allowedHeaders)
+				.allowCredentials(true);
+		
+		Arrays.asList(HttpMethod.values()).stream().forEach(method -> corsHandler.allowedMethod(method));
+		router.route().handler(corsHandler);
+
+		router.route("/eventbus/*").handler(sockJSHandler);
+		
+		router.route("/nms*").handler(BodyHandler.create());
+		router.post("/nms").handler(this::sendMsg);
+		
+		vertx
+			.createHttpServer()
+			.requestHandler(router::accept)
+			.listen(port, res -> {
+				if (res.failed()) {
+					fut.fail(res.cause());
+					LOG.info("REST API service listening on port: " + port);
+				} else {		
+					fut.complete();
+				}
+			});
+	}
+	
+	private void sendMsg(RoutingContext routingContext) {
+		if (eb == null) {
+			LOG.error("EventBus not defined.");
+			routingContext.response()
+		    	.putHeader("content-type", "application/json; charset=utf-8")
+		    	.end("{}");
+			return;
+		}
+		JsonObject o = routingContext.getBodyAsJson();
+		System.out.println("json: "+routingContext.getBodyAsString());
+		String service = o.getString("service");
+		JsonObject query = o.getJsonObject("query");
+		// TODO: check query...
+		eb.send(service, query, reply -> {
+			if (reply.succeeded()) {
+				LOG.info(((JsonObject)reply.result().body()).encodePrettily());
+				routingContext.response()
+			      .putHeader("content-type", "application/json; charset=utf-8")
+			      .end(((JsonObject)reply.result().body()).encodePrettily());
+			} else {
+		    	LOG.error("get.serviceinfo failed.", reply.cause());
+		    }
+		});
+	}
+	
+	
+	/*private static Console instance = null;
 	private List<Capability> capabilities = new ArrayList<Capability>();
 	private Receipt currentRcpt = null;
 	private AmqpClientVerticle verticle = null;
@@ -217,6 +298,6 @@ public class Console extends TimerTask implements ResultListener {
 	public void onResult(Message res) {
 		System.out.println("Result: ");
 		System.out.println(Message.toJsonString(res, true));
-	}
+	}*/
 
 }
