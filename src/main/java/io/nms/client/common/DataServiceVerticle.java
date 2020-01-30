@@ -13,39 +13,21 @@ import io.vertx.core.json.JsonObject;
 
 public class DataServiceVerticle extends AmqpVerticle {
 	
-	public void start(Future<Void> fut) {
-		super.start();
-		
-		String uname = config().getJsonObject("client").getString("username", "");
-		String pass = config().getJsonObject("client").getString("password", "");
+	protected String serviceName = "nms.dss";
 	
-		String host = config().getJsonObject("amqp").getString("host", "");
-		int port = config().getJsonObject("amqp").getInteger("port", 0);
-		
-		Future<Void> futEb = Future.future(promise -> initEventBus(promise));
-		Future<Void> futConn = futEb
-			.compose(v -> {
-				return Future.<Void>future(promise -> createAmqpConnection(host, port, promise));
-			})
-			.compose(v -> {
-				return Future.<Void>future(promise -> requestAuthentication(uname, pass, promise));
-			});
-		futConn.setHandler(res -> {
-			if (res.failed()) {
-				fut.fail(res.cause());
-			} else {
-				setServiceApi();
-				fut.complete();
-			}
-		});
+	public void start(Future<Void> fut) {
+		super.start(fut);
 	}
 	
 	@Override
 	protected void setServiceApi() {
 		eb.consumer("nms.dss", message -> {
-			JsonObject msgBody = ((JsonObject) message.body());
-			String action = msgBody.getString("action");
-			LOG.info("[DSS] EB message: " + action + " | " + msgBody.getJsonObject("payload").encodePrettily());
+			JsonObject query = ((JsonObject) message.body());
+			String action = query.getString("action");
+			JsonObject params = query.getJsonObject("params");
+			LOG.info("[" + serviceName + "] got query: " + action + " | " + params.encodePrettily());
+			
+			// TODO: check query...
 			
 			switch (action)
 			{
@@ -53,13 +35,13 @@ public class DataServiceVerticle extends AmqpVerticle {
 				getServiceInfo(message);
 				break;	
 			case "get.capabilities":
-				getCapabilities(message);
+				getCapabilities(message, params);
 				break;		
 			case "send.specification":
-				sendSpecification(message);
+				sendSpecification(message, params);
 				break;
 			case "send.interrupt":
-				sendInterrupt(message);
+				sendInterrupt(message, params);
 				break;
 			
 			// result read/delete
@@ -92,11 +74,6 @@ public class DataServiceVerticle extends AmqpVerticle {
 			String resStr = io.nms.messages.Message.toJsonString(res, false);
 			LOG.info("Got Result: "+resStr);
 		
-			// send to ResultListener (if defined)
-			if (this.rListener != null) {
-				this.rListener.onResult(res);
-			}
-		
 			// send over eventbus
 			eb.send("nms.dss", resStr);
 		
@@ -114,44 +91,76 @@ public class DataServiceVerticle extends AmqpVerticle {
 	
 	/*--------------- API functions ----------------*/
 	protected void getServiceInfo(Message<Object> message) {
-		JsonObject clientId = new JsonObject()
-			.put("name", clientName)
+		JsonObject response = new JsonObject();
+		response.put("service", serviceName);
+		
+		JsonObject content = new JsonObject()
+			.put("service_name", serviceName)
+			.put("complete_name", clientName)
 	        .put("role", clientRole);
-		message.reply(new JsonObject().put("client", clientId));	      
+		response.put("content", content);
+		
+		message.reply(response);	      
 	}
 	
-	protected void getCapabilities(Message<Object> message) {
+	protected void getCapabilities(Message<Object> message, JsonObject params) {
+		JsonObject response = new JsonObject();
+		response.put("service", serviceName);
+		
+		// TODO: use params (match...)
+		
 		Future<List<Capability>> fut = Future.future(promise -> discoverCapabilities(promise));
 		fut.setHandler(res -> {
 	        if (res.succeeded()) {
 	        	String caps = io.nms.messages.Message.toStringFromList(res.result());
-	        	JsonObject json = new JsonObject().put("capabilities", caps);
-	        	message.reply(json);	      
+	        	JsonObject content = new JsonObject().put("capabilities", caps);
+	        	response.put("content", content);
+	        	message.reply(response);
 	        } else {
 	        	LOG.error("Failed to get Capabilities", res.cause());
-	        	message.reply(new JsonObject().put("capabilities", new JsonObject()));
+	        	response.put("error", "internal error");
+	        	message.reply(response);
 	        }
 		});
 	}
-	protected void sendSpecification(Message<Object> message) {
-		JsonObject payload = ((JsonObject) message.body());
-		String strCap = payload.getString("capability");
+	protected void sendSpecification(Message<Object> message, JsonObject params) {
+		JsonObject response = new JsonObject();
+		response.put("service", serviceName);
+		
+		if (!params.containsKey("capability")) {
+			response.put("error", "missing capabilitiy");
+        	message.reply(response);
+			return;
+		}
+		
+		String strCap = params.getJsonObject("capability").encode();
 		Capability cap = (Capability) io.nms.messages.Message.fromJsonString(strCap);
 		Specification spec = new Specification(cap);
-		//LOG.info("Send Specification: "+io.nms.messages.Message.toJsonString(spec, true));
 		Future<Receipt> fut = Future.future(rct -> sendSpecification(spec, rct));
 		fut.setHandler(res -> {
 	        if (res.succeeded()) {
-	        	message.reply(io.nms.messages.Message.toJsonString(res.result(), false));
+	        	JsonObject content = new JsonObject();
+	        	content.put("receipt", io.nms.messages.Message.toJsonString(res.result(), false));
+	        	response.put("content", content);
+	        	message.reply(response);
 	        } else {
 	        	LOG.error("Failed to get Receipt", res.cause());
-	        	message.reply("");
+	        	response.put("error", "internal error");
+	        	message.reply(response);
 	        }
 	    });
 	}
-	protected void sendInterrupt(Message<Object> message) {
-		JsonObject payload = ((JsonObject) message.body());
-		String rctSchema = payload.getString("receipt.schema");
+	protected void sendInterrupt(Message<Object> message, JsonObject params) {
+		JsonObject response = new JsonObject();
+		response.put("service", serviceName);
+		
+		if (!params.containsKey("receipt")) {
+			response.put("error", "missing receipt");
+        	message.reply(response);
+			return;
+		}
+		
+		String rctSchema = params.getString("receipt");
 		if (activeSpecs.containsKey(rctSchema)) {
 			Interrupt interrupt = new Interrupt(activeSpecs.get(rctSchema));
 			LOG.info("Send Interrupt: "+io.nms.messages.Message.toJsonString(interrupt, true));
@@ -159,16 +168,24 @@ public class DataServiceVerticle extends AmqpVerticle {
 			fut.setHandler(res -> {
 				if (res.succeeded()) {
 					activeSpecs.remove(rctSchema);
-					message.reply(io.nms.messages.Message.toJsonString(res.result(), false));	        	
+					JsonObject content = new JsonObject();
+					content.put("receipt", io.nms.messages.Message.toJsonString(res.result(), false));
+		        	response.put("content", content);
+		        	message.reply(response);
 				} else {
 					LOG.error("Failed to get Receipt", res.cause());
-					message.reply("");
+					response.put("error", "internal error");
+		        	message.reply(response);
 				}
 			});
+		} else {
+			response.put("error", "specification not found");
+        	message.reply(response);
 		}
 	}
+	
+	/*----------------------------------------------------------*/
 	protected void toResultsStorageAPI(Message<Object> message) {
-		// to customMessage format...
     	JsonObject toStorageMsg = new JsonObject()
     		.put("action", message.headers().get("action"))
     		.put("payload", (JsonObject) message.body());

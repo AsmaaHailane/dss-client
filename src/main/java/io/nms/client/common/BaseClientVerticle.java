@@ -1,15 +1,11 @@
 package io.nms.client.common;
 
-import java.util.Arrays;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import io.nms.client.cli.ResultListener;
 import io.nms.messages.Capability;
 import io.nms.messages.Interrupt;
 import io.nms.messages.Receipt;
@@ -17,28 +13,22 @@ import io.nms.messages.Specification;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
 import io.vertx.core.eventbus.EventBus;
-import io.vertx.core.http.HttpMethod;
 import io.vertx.core.json.JsonObject;
-import io.vertx.ext.web.Router;
-import io.vertx.ext.web.handler.CorsHandler;
-import io.vertx.ext.web.handler.sockjs.BridgeOptions;
-import io.vertx.ext.web.handler.sockjs.PermittedOptions;
-import io.vertx.ext.web.handler.sockjs.SockJSHandler;
 
 
 public abstract class BaseClientVerticle extends AbstractVerticle {
 	protected Logger LOG = LoggerFactory.getLogger(BaseClientVerticle.class);
-	protected ResultListener rListener = null;
 	
+	protected String serviceName = "";
 	protected String clientName = "";
 	protected String clientRole = "";
 	
 	protected HashMap<String, Receipt> activeSpecs = new HashMap<String, Receipt>();
 	
-	private static final String ADDRESS = "nms.*";
 	EventBus eb = null;
 	
 	// implemented by AmqpVerticle
+	protected abstract void createAmqpConnection(String host, int port, Future<Void> promise);
 	protected abstract void requestAuthentication(String uname, String pass, Future<Void> prom);
 	protected abstract void subscribeToResults(Receipt rct, Future<Void> prom);
 	protected abstract void discoverCapabilities(Future<List<Capability>> prom);
@@ -51,50 +41,27 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 	protected abstract void setServiceApi();
 
 	@Override
-	public void start() {}
+	public void start(Future<Void> fut) {
+		String uname = config().getJsonObject("client").getString("username", "");
+		String pass = config().getJsonObject("client").getString("password", "");
 	
-	protected void initEventBus(Future<Void> fut) {
-		eb = vertx.eventBus();
-		fut.complete();
-		/*Router router = Router.router(vertx);
+		String host = config().getJsonObject("amqp").getString("host", "");
+		int port = config().getJsonObject("amqp").getInteger("port", 0);
 		
-		SockJSHandler sockJSHandler = SockJSHandler.create(vertx);
-		BridgeOptions bridgeOptions = new BridgeOptions()
-				.addInboundPermitted(new PermittedOptions().setAddressRegex(ADDRESS))
-				.addOutboundPermitted(new PermittedOptions().setAddressRegex(ADDRESS));
-		sockJSHandler.bridge(bridgeOptions);
-
-		Set<String> allowedHeaders = new HashSet<>();
-		allowedHeaders.add("x-requested-with");
-		allowedHeaders.add("Access-Control-Allow-Origin");
-		allowedHeaders.add("origin");
-		allowedHeaders.add("Content-Type");
-		allowedHeaders.add("accept");
-		allowedHeaders.add("X-PINGARUNER");
-
-		CorsHandler corsHandler = CorsHandler.create("http://10.11.200.213:8080").allowedHeaders(allowedHeaders)
-				.allowCredentials(true);
-		
-		Arrays.asList(HttpMethod.values()).stream().forEach(method -> corsHandler.allowedMethod(method));
-		router.route().handler(corsHandler);
-
-		router.route("/eventbus/*").handler(sockJSHandler);
-		
-		setServiceApi();
-		
-		vertx.createHttpServer().requestHandler(router::accept).listen(9000, res -> {
+		Future<Void> futConn = Future.future(promise -> createAmqpConnection(host, port, promise));
+		Future<Void> futAuth = futConn
+			.compose(v -> {
+				return Future.<Void>future(promise -> requestAuthentication(uname, pass, promise));
+			});
+		futAuth.setHandler(res -> {
 			if (res.failed()) {
 				fut.fail(res.cause());
-			} else {		
+			} else {
+				eb = vertx.eventBus();
+				setServiceApi();
 				fut.complete();
 			}
-		});*/
-	}
-	
-	
-	  
-	public void registerResultListener(ResultListener rl) {
-		this.rListener = rl;
+		});
 	}
 	
 	@Override

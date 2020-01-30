@@ -23,8 +23,9 @@ public class Console extends AbstractVerticle {
 	
 	private static final Logger LOG = LoggerFactory.getLogger(Console.class);
 	private EventBus eb = null;
-	private int port = 8000;
+	private int port = 9000;
 	private static final String ADDRESS = "nms.*";
+	private final String serviceName = "nms_rest";
 	
 	@Override
 	public void start(Future<Void> fut) {
@@ -52,11 +53,13 @@ public class Console extends AbstractVerticle {
 		
 		Arrays.asList(HttpMethod.values()).stream().forEach(method -> corsHandler.allowedMethod(method));
 		router.route().handler(corsHandler);
-
+		
+		// handle eventubs messages
 		router.route("/eventbus/*").handler(sockJSHandler);
 		
+		// handle REST requests
 		router.route("/nms*").handler(BodyHandler.create());
-		router.post("/nms").handler(this::sendMsg);
+		router.post("/nms").handler(this::processRequest);
 		
 		vertx
 			.createHttpServer()
@@ -71,27 +74,66 @@ public class Console extends AbstractVerticle {
 			});
 	}
 	
-	private void sendMsg(RoutingContext routingContext) {
+	private void processRequest(RoutingContext routingContext) {
+		JsonObject response = new JsonObject();
+		response.put("service", serviceName);
 		if (eb == null) {
-			LOG.error("EventBus not defined.");
+			response.put("error", "eventbus not defined");
 			routingContext.response()
 		    	.putHeader("content-type", "application/json; charset=utf-8")
-		    	.end("{}");
+		    	.end(response.encode());
 			return;
 		}
-		JsonObject o = routingContext.getBodyAsJson();
-		System.out.println("json: "+routingContext.getBodyAsString());
-		String service = o.getString("service");
-		JsonObject query = o.getJsonObject("query");
-		// TODO: check query...
+		JsonObject request = routingContext.getBodyAsJson();
+		if (request ==  null) {
+			response.put("error", "no request defined");
+			routingContext.response()
+		    	.putHeader("content-type", "application/json; charset=utf-8")
+		    	.end(response.encode());
+			return;	
+		}
+		if (!request.containsKey("service")) {
+			response.put("error", "target service field not defined");
+			routingContext.response()
+		    	.putHeader("content-type", "application/json; charset=utf-8")
+		    	.end(response.encode());
+			return;	
+		}	
+		String service = request.getString("service");
+		if (service.isEmpty()) {
+			response.put("error", "target service empty");
+			routingContext.response()
+		    	.putHeader("content-type", "application/json; charset=utf-8")
+		    	.end(response.encode());
+			return;	
+		}
+		if (!request.containsKey("query")) {
+			response.put("error", "query field not defined");
+			routingContext.response()
+		    	.putHeader("content-type", "application/json; charset=utf-8")
+		    	.end(response.encode());
+			return;	
+		}
+		JsonObject query = request.getJsonObject("query");
+		if (!query.containsKey("action") || !query.containsKey("params")) {
+			response.put("error", "action or params missing in query field");
+			routingContext.response()
+		    	.putHeader("content-type", "application/json; charset=utf-8")
+		    	.end(response.encode());
+			return;	
+		}
 		eb.send(service, query, reply -> {
 			if (reply.succeeded()) {
-				LOG.info(((JsonObject)reply.result().body()).encodePrettily());
+				//LOG.info(((JsonObject)reply.result().body()).encodePrettily());
 				routingContext.response()
-			      .putHeader("content-type", "application/json; charset=utf-8")
-			      .end(((JsonObject)reply.result().body()).encodePrettily());
+			    	.putHeader("content-type", "application/json; charset=utf-8")
+			    	.end(((JsonObject)reply.result().body()).encode());
 			} else {
-		    	LOG.error("get.serviceinfo failed.", reply.cause());
+		    	//LOG.error("get.serviceinfo failed.", reply.cause());
+				response.put("error", "failed to reach service");
+				routingContext.response()
+			    	.putHeader("content-type", "application/json; charset=utf-8")
+			    	.end(response.encode());
 		    }
 		});
 	}
