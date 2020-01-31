@@ -1,5 +1,6 @@
 package io.nms.client.common;
 
+import io.nms.storage.NmsEbMessage;
 import io.vertx.core.Future;
 import io.vertx.core.eventbus.Message;
 import io.vertx.core.json.JsonObject;
@@ -14,21 +15,19 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 	
 	@Override
 	protected void setServiceApi() {
-		eb.consumer("nms.topology", message -> {
-			JsonObject query = ((JsonObject) message.body());
-			String action = query.getString("action");
-			JsonObject params = query.getJsonObject("params");
-			LOG.info("[" + serviceName + "] got query: " + action + " | " + params.encodePrettily());
+		eb.consumer(serviceName, message -> {
+			NmsEbMessage nmsEbMsg = new NmsEbMessage(message);
+			LOG.info("[" + serviceName + "] got query: " 
+					+ nmsEbMsg.getAction() + " | "
+					+ nmsEbMsg.getParams().encodePrettily());
 			
-			// TODO: check query...
-			
-			switch (action)
+			switch (nmsEbMsg.getAction())
 			{
-			case "get.serviceinfo":
-				getServiceInfo(message);
+			case "get_service_info":
+				getServiceInfo(nmsEbMsg);
 				break;	
-			case "get.topology":
-				getTopology(message);
+			case "get_topology":
+				getTopology(nmsEbMsg);
 				break;
 
 			default:
@@ -43,9 +42,11 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 		if (activeSpecs.containsKey(res.getSchema())) {
 			String resStr = io.nms.messages.Message.toJsonString(res, false);
 			LOG.info("Got Result: "+resStr);
-		
+			
+			// some processing...
+			
 			// send over eventbus
-			eb.send("nms.topology", resStr);
+			//eb.send("nms.topology", resStr);
 		
 			// send to storage (TODO: if defined)
 			/*JsonObject message = new JsonObject()
@@ -60,15 +61,24 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 	}
 	
 	/*--------------- API functions ----------------*/
-	protected void getServiceInfo(Message<Object> message) {
-		JsonObject clientId = new JsonObject()
-			.put("name", serviceName)
+	protected void getServiceInfo(NmsEbMessage message) {
+		JsonObject response = new JsonObject();
+		response.put("service", serviceName);
+		
+		JsonObject content = new JsonObject()
+			.put("service_name", serviceName)
+			.put("complete_name", clientName)
 	        .put("role", clientRole);
-		message.reply(new JsonObject().put("client", clientId));	      
+		response.put("content", content);
+		
+		message.reply(response);	      
 	}
 	
-	protected void getTopology(Message<Object> message) {
-		message.reply("");
+	protected void getTopology(NmsEbMessage message) {
+		JsonObject response = new JsonObject();
+		response.put("service", serviceName);
+		response.put("content", new JsonObject());
+		message.reply(response);
 	}
 	/*----------------------------------------------*/
 	

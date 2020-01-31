@@ -6,6 +6,7 @@ import io.nms.messages.Capability;
 import io.nms.messages.Interrupt;
 import io.nms.messages.Receipt;
 import io.nms.messages.Specification;
+import io.nms.storage.NmsEbMessage;
 import io.vertx.core.Future;
 import io.vertx.core.eventbus.Message;
 import io.vertx.core.json.JsonArray;
@@ -21,48 +22,29 @@ public class DataServiceVerticle extends AmqpVerticle {
 	
 	@Override
 	protected void setServiceApi() {
-		eb.consumer("nms.dss", message -> {
-			JsonObject query = ((JsonObject) message.body());
-			String action = query.getString("action");
-			JsonObject params = query.getJsonObject("params");
-			LOG.info("[" + serviceName + "] got query: " + action + " | " + params.encodePrettily());
+		eb.consumer(serviceName, message -> {
+			NmsEbMessage nmsEbMsg = new NmsEbMessage(message);
+			LOG.info("[" + serviceName + "] got query: " 
+					+ nmsEbMsg.getAction() + " | "
+					+ nmsEbMsg.getParams().encodePrettily());
 			
-			// TODO: check query...
-			
-			switch (action)
+			switch (nmsEbMsg.getAction())
 			{
-			case "get.serviceinfo":
-				getServiceInfo(message);
+			case "get_service_info":
+				getServiceInfo(nmsEbMsg);
 				break;	
-			case "get.capabilities":
-				getCapabilities(message, params);
+			case "get_capabilities":
+				getCapabilities(nmsEbMsg);
 				break;		
-			case "send.specification":
-				sendSpecification(message, params);
+			case "send_specification":
+				sendSpecification(nmsEbMsg);
 				break;
-			case "send.interrupt":
-				sendInterrupt(message, params);
-				break;
-			
-			// result read/delete
-			case "get_all_operations":
-				toResultsStorageAPI(message); 
-				break;
-			case "get_results_operation":
-				toResultsStorageAPI(message); 
-				break;
-			case "get_result_id":
-				toResultStorageAPI(message); 
-				break;
-			case "del_results_operation":
-				toResultStorageAPI(message); 
-				break;
-			case "del_result_id":
-				toResultStorageAPI(message); 
+			case "send_interrupt":
+				sendInterrupt(nmsEbMsg);
 				break;
 			
 			default:
-				message.reply("");
+				unsupportedAction(nmsEbMsg);
 			}
 		});
 	}
@@ -74,23 +56,26 @@ public class DataServiceVerticle extends AmqpVerticle {
 			String resStr = io.nms.messages.Message.toJsonString(res, false);
 			LOG.info("Got Result: "+resStr);
 		
-			// send over eventbus
+			// TODO: publish nms.info.dss
 			eb.send("nms.dss", resStr);
 		
-			// send to storage (TODO: if defined)
+			// send to storage
 			JsonObject message = new JsonObject()
 				.put("action", "add_result")
-				.put("payload", new JsonObject(resStr));
-			eb.send("dss.storage", message, reply -> {
+				.put("params", new JsonObject(resStr));
+			eb.send("nms.storage", message, reply -> {
 				if (reply.succeeded()) {
-					LOG.info("Result stored.");
+					JsonObject opResult = (JsonObject)reply.result().body();
+					if (!opResult.containsKey("error")) {
+						LOG.info("Result stored.");
+					}
 				}
 			});
 		}
 	}
 	
 	/*--------------- API functions ----------------*/
-	protected void getServiceInfo(Message<Object> message) {
+	protected void getServiceInfo(NmsEbMessage message) {
 		JsonObject response = new JsonObject();
 		response.put("service", serviceName);
 		
@@ -99,15 +84,15 @@ public class DataServiceVerticle extends AmqpVerticle {
 			.put("complete_name", clientName)
 	        .put("role", clientRole);
 		response.put("content", content);
-		
 		message.reply(response);	      
 	}
 	
-	protected void getCapabilities(Message<Object> message, JsonObject params) {
+	protected void getCapabilities(NmsEbMessage message) {
 		JsonObject response = new JsonObject();
 		response.put("service", serviceName);
 		
-		// TODO: use params (match...)
+		JsonObject params = message.getParams();
+		// TODO: check params...
 		
 		Future<List<Capability>> fut = Future.future(promise -> discoverCapabilities(promise));
 		fut.setHandler(res -> {
@@ -123,9 +108,12 @@ public class DataServiceVerticle extends AmqpVerticle {
 	        }
 		});
 	}
-	protected void sendSpecification(Message<Object> message, JsonObject params) {
+	protected void sendSpecification(NmsEbMessage message) {
 		JsonObject response = new JsonObject();
 		response.put("service", serviceName);
+		
+		JsonObject params = message.getParams();
+		// TODO: check params...
 		
 		if (!params.containsKey("capability")) {
 			response.put("error", "missing capabilitiy");
@@ -150,9 +138,12 @@ public class DataServiceVerticle extends AmqpVerticle {
 	        }
 	    });
 	}
-	protected void sendInterrupt(Message<Object> message, JsonObject params) {
+	protected void sendInterrupt(NmsEbMessage message) {
 		JsonObject response = new JsonObject();
 		response.put("service", serviceName);
+		
+		JsonObject params = message.getParams();
+		// TODO: check params...
 		
 		if (!params.containsKey("receipt")) {
 			response.put("error", "missing receipt");
@@ -184,37 +175,14 @@ public class DataServiceVerticle extends AmqpVerticle {
 		}
 	}
 	
+	protected void unsupportedAction(NmsEbMessage message) {
+		JsonObject response = new JsonObject();
+		response.put("service", serviceName);
+		response.put("error", "Action unsupported");		
+		message.reply(response);
+	}
+	
 	/*----------------------------------------------------------*/
-	protected void toResultsStorageAPI(Message<Object> message) {
-    	JsonObject toStorageMsg = new JsonObject()
-    		.put("action", message.headers().get("action"))
-    		.put("payload", (JsonObject) message.body());
-    	eb.send("dss.storage", toStorageMsg, reply -> {
-    		if (reply.succeeded()) {
-    			LOG.info( ((JsonArray)reply.result().body()).encodePrettily());
-    			message.reply((JsonArray)reply.result().body());
-    		} else {
-    			LOG.error("get_all_operations failed.", reply.cause());
-	        	message.reply(new JsonArray());
-    		}
-    	});
-	}
-	protected void toResultStorageAPI(Message<Object> message) {
-		// to customMessage format...
-    	JsonObject toStorageMsg = new JsonObject()
-    		.put("action", message.headers().get("action"))
-    		.put("payload", (JsonObject) message.body());
-    	eb.send("dss.storage", toStorageMsg, reply -> {
-    		if (reply.succeeded()) {
-    			message.reply((JsonObject)reply.result().body());
-    			//LOG.info(((JsonObject)reply.result()).encodePrettily());
-    		} else {
-    			LOG.error("get_all_operations failed.", reply.cause());
-	        	message.reply(new JsonObject());
-    		}
-    	});
-	}
-	/*----------------------------------------------*/
 	
 	@Override
 	public void stop(Future stopFuture) throws Exception {
@@ -222,52 +190,3 @@ public class DataServiceVerticle extends AmqpVerticle {
 		super.stop(stopFuture);
 	}
 }
-	/*
-	protected void getAgents(Message<Object> message) {
-		JsonObject req = new JsonObject();
-    	req.put("action", "get_all_agents");
-    	req.put("payload", new JsonObject());
-    	Future<String> fut = Future
-    		.future(promise -> sendAdminReq(req, promise));
-		fut.setHandler(res -> {
-	        if (res.succeeded()) {
-	        	JsonObject r = new JsonObject(res.result());
-	        	message.reply(new JsonObject().put("agents", r.getJsonArray("payload")));
-	        } else {
-	        	LOG.error("Failed to get Agents", res.cause());
-	        	message.reply(new JsonObject().put("agents", new JsonObject()));
-	        }
-	    });
-	}
-	protected void getClients(Message<Object> message) {
-		JsonObject req = new JsonObject();
-    	req.put("action", "get_all_clients");
-    	req.put("payload", new JsonObject());
-    	Future<String> fut = Future
-    			.future(promise -> sendAdminReq(req, promise));
-		fut.setHandler(res -> {
-	        if (res.succeeded()) {
-	        	JsonObject r = new JsonObject(res.result());
-	        	message.reply(new JsonObject().put("clients", r.getJsonArray("payload")));
-	        } else {
-	        	LOG.error("Failed to get Clients", res.cause());
-	        	message.reply(new JsonObject().put("clients", new JsonObject()));
-	        }
-	    });
-	}
-	protected void getStats(Message<Object> message) {
-		JsonObject req = new JsonObject();
-    	req.put("action", "get_stats");
-    	req.put("payload", new JsonObject());
-    	Future<String> fut = Future
-    			.future(promise -> sendAdminReq(req, promise));
-		fut.setHandler(res -> {
-	        if (res.succeeded()) {
-	        	JsonObject r = new JsonObject(res.result());
-	        	message.reply(new JsonObject().put("stats", r));
-	        } else {
-	        	LOG.error("Failed to get Clients", res.cause());
-	        	message.reply(new JsonObject().put("stats", new JsonObject()));
-	        }
-	    });
-	} */
