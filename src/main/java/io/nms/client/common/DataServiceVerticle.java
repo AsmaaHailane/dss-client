@@ -57,7 +57,10 @@ public class DataServiceVerticle extends AmqpVerticle {
 			LOG.info("Got Result: "+resStr);
 		
 			// TODO: publish nms.info.dss
-			eb.send("nms.dss", resStr);
+			JsonObject ebPubMsg = new JsonObject()
+				.put("service", serviceName)
+				.put("content", new JsonObject(resStr));
+			eb.publish("nms.info.dss", ebPubMsg);
 		
 			// send to storage
 			JsonObject message = new JsonObject()
@@ -80,8 +83,7 @@ public class DataServiceVerticle extends AmqpVerticle {
 		response.put("service", serviceName);
 		
 		JsonObject content = new JsonObject()
-			.put("service_name", serviceName)
-			.put("complete_name", clientName)
+			.put("name", clientName)
 	        .put("role", clientRole);
 		response.put("content", content);
 		message.reply(response);	      
@@ -98,7 +100,7 @@ public class DataServiceVerticle extends AmqpVerticle {
 		fut.setHandler(res -> {
 	        if (res.succeeded()) {
 	        	String caps = io.nms.messages.Message.toStringFromList(res.result());
-	        	JsonObject content = new JsonObject().put("capabilities", caps);
+	        	JsonObject content = new JsonObject().put("docs", new JsonArray(caps));
 	        	response.put("content", content);
 	        	message.reply(response);
 	        } else {
@@ -127,8 +129,9 @@ public class DataServiceVerticle extends AmqpVerticle {
 		Future<Receipt> fut = Future.future(rct -> sendSpecification(spec, rct));
 		fut.setHandler(res -> {
 	        if (res.succeeded()) {
+	        	String receipt = io.nms.messages.Message.toJsonString(res.result(), false);
 	        	JsonObject content = new JsonObject();
-	        	content.put("receipt", io.nms.messages.Message.toJsonString(res.result(), false));
+	        	content.put("receipt", new JsonObject(receipt));
 	        	response.put("content", content);
 	        	message.reply(response);
 	        } else {
@@ -159,8 +162,9 @@ public class DataServiceVerticle extends AmqpVerticle {
 			fut.setHandler(res -> {
 				if (res.succeeded()) {
 					activeSpecs.remove(rctSchema);
-					JsonObject content = new JsonObject();
-					content.put("receipt", io.nms.messages.Message.toJsonString(res.result(), false));
+					String receipt = io.nms.messages.Message.toJsonString(res.result(), false);
+		        	JsonObject content = new JsonObject();
+		        	content.put("receipt", new JsonObject(receipt));
 		        	response.put("content", content);
 		        	message.reply(response);
 				} else {

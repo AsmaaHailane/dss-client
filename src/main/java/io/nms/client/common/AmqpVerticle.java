@@ -13,6 +13,7 @@ import io.vertx.amqp.AmqpConnection;
 import io.vertx.amqp.AmqpMessage;
 import io.vertx.amqp.AmqpReceiver;
 import io.vertx.core.Future;
+import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 
 public abstract class AmqpVerticle extends BaseClientVerticle {
@@ -85,7 +86,12 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 			if (replyReceiver.succeeded()) {
 				String replyToAddress = replyReceiver.result().address();
 				replyReceiver.result().handler(msg -> {
-					promise.complete(Message.toListfromString(msg.bodyAsString()));
+					//JsonObject ebRep = new JsonObject(msg.bodyAsString());
+					//if (ebRep.containsKey("error")) {
+					//	promise.fail(ebRep.getString("error"));
+					//} else {
+						promise.complete(Message.toListfromString(msg.bodyAsString()));
+					//}
 				});
 				connection.createSender("/client/capabilities", sender -> {
 					if (sender.succeeded()) {
