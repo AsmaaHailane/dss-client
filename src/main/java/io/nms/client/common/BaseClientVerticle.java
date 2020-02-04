@@ -10,6 +10,7 @@ import io.nms.messages.Capability;
 import io.nms.messages.Interrupt;
 import io.nms.messages.Receipt;
 import io.nms.messages.Specification;
+import io.nms.storage.NmsEbMessage;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
 import io.vertx.core.eventbus.EventBus;
@@ -62,6 +63,17 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 				fut.complete();
 			}
 		});
+	}
+	
+	protected void getServiceInfo(NmsEbMessage message) {
+		JsonObject response = new JsonObject();
+		response.put("service", serviceName);
+		
+		JsonObject content = new JsonObject()
+			.put("name", clientName)
+	        .put("role", clientRole);
+		response.put("content", content);
+		message.reply(response);	      
 	}
 	
 	@Override

@@ -78,16 +78,6 @@ public class DataServiceVerticle extends AmqpVerticle {
 	}
 	
 	/*--------------- API functions ----------------*/
-	protected void getServiceInfo(NmsEbMessage message) {
-		JsonObject response = new JsonObject();
-		response.put("service", serviceName);
-		
-		JsonObject content = new JsonObject()
-			.put("name", clientName)
-	        .put("role", clientRole);
-		response.put("content", content);
-		message.reply(response);	      
-	}
 	
 	protected void getCapabilities(NmsEbMessage message) {
 		JsonObject response = new JsonObject();
