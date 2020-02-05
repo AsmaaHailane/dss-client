@@ -1,6 +1,7 @@
 package io.nms.client.common;
 
 import java.util.List;
+import java.util.Random;
 
 import io.nms.messages.Capability;
 import io.nms.messages.Interrupt;
@@ -13,11 +14,11 @@ import io.vertx.amqp.AmqpConnection;
 import io.vertx.amqp.AmqpMessage;
 import io.vertx.amqp.AmqpReceiver;
 import io.vertx.core.Future;
-import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 
 public abstract class AmqpVerticle extends BaseClientVerticle {
 	private AmqpConnection connection = null;
+	private Random rand = new Random(); 
 	
 	/* Create AMQP connection to the broker */
 	protected void createAmqpConnection(String host, int port, Future<Void> promise) {
@@ -66,7 +67,7 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 						req.put("password", password);
 						sender.result().send(AmqpMessage.create()
 						  .replyTo(replyToAddress)
-						  .id("2")
+						  .id(String.valueOf(rand.nextInt(10000)))
 						  .withBody(req.encode())
 						  .build());
 						LOG.info("Authenticating...");										
@@ -99,7 +100,7 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 						req.put("client_role", clientRole);
 						sender.result().send(AmqpMessage.create()
 					      .replyTo(replyToAddress)
-					      .id("100")
+					      .id(String.valueOf(rand.nextInt(10000)))
 					      .withBody(req.encode())
 					      .build());
 					}
@@ -134,7 +135,7 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 					if (sender.succeeded()) {
 						sender.result().send(AmqpMessage.create()
 						  .replyTo(replyToAddress)
-						  .id("10")
+						  .id(String.valueOf(rand.nextInt(10000)))
 						  .withBody(Message.toJsonString(spec, false)).build());
 					}
 				});
@@ -174,7 +175,7 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 					if (sender.succeeded()) {
 						sender.result().send(AmqpMessage.create()
 					      .replyTo(replyToAddress)
-					      .id("100")
+					      .id(String.valueOf(rand.nextInt(10000)))
 					      .withBody(Message.toJsonString(itr, false)).build());
 					}
 				});
@@ -197,7 +198,7 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 					if (sender.succeeded()) {
 						sender.result().send(AmqpMessage.create()
 					      .replyTo(replyToAddress)
-					      .id("101")
+					      .id(String.valueOf(rand.nextInt(10000)))
 					      .withBody(req.encode())
 					      .build());
 					} else {

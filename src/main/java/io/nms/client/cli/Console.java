@@ -23,7 +23,7 @@ public class Console extends AbstractVerticle {
 	
 	private static final Logger LOG = LoggerFactory.getLogger(Console.class);
 	private EventBus eb = null;
-	private int port = 9000;
+	private int port = 9090;
 	private static final String ADDRESS = "nms.*";
 	private final String serviceName = "nms_rest";
 	
@@ -67,8 +67,8 @@ public class Console extends AbstractVerticle {
 			.listen(port, res -> {
 				if (res.failed()) {
 					fut.fail(res.cause());
+				} else {
 					LOG.info("REST API service listening on port: " + port);
-				} else {		
 					fut.complete();
 				}
 			});

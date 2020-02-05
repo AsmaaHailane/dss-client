@@ -12,18 +12,21 @@ import io.nms.messages.Result;
 import io.nms.messages.Specification;
 import io.nms.storage.NmsEbMessage;
 import io.vertx.core.Future;
+import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 
 public class TopologyServiceVerticle extends AmqpVerticle {
 	
-	private static final int TOPO_UPDATE_PERIOD_MS = 10000;
-	private static final int RESET_PERIOD_S = 300;
-	private static final int SPEC_PERIOD_MS = 30000;
+	private static final int TOPO_UPDATE_PERIOD_MS = 20000;
+	private static final int RESET_PERIOD_S = 600;
+	private static final int SPEC_PERIOD_MS = 10000;
 	
 	protected String serviceName = "nms.topology";
 	protected HashMap<String, Capability> knownCaps = new HashMap<String, Capability>();
-	protected JsonObject currentTopology = new JsonObject();
-	protected Instant lastUpdate = Instant.now();	
+	protected Instant lastUpdate = Instant.now();
+	
+	protected HashMap<String, JsonObject> nodes = new HashMap<String, JsonObject>();
+	protected List<JsonObject> links = new ArrayList<JsonObject>();
 	
 	public void start(Future<Void> fut) {
 		Future<Void> futBase = Future.future(promise -> super.start(promise));
@@ -33,10 +36,10 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 			} else {
 				// update topo every 60s
 				vertx.setPeriodic(TOPO_UPDATE_PERIOD_MS, id -> {
-					LOG.info("Update topology");
+					LOG.info("Check for new topology capabilities");
 					// reset known capabilities every 10mn
 					if (lastUpdate.plusSeconds(RESET_PERIOD_S).isBefore(Instant.now())) {
-						LOG.info("Clear Capabilities");
+						LOG.info("Reset discovered capabilities");
 						knownCaps.clear();
 						lastUpdate = Instant.now();
 					}
@@ -47,9 +50,8 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 							fut.fail(newCapsRes.cause());
 						} else {
 							if (!newCapsRes.result().isEmpty()) {
+								LOG.info("Use new topology capabilities");
 								sendTopologySpecifications(newCapsRes.result());
-							} else {
-								LOG.info("No new topology capabilities");
 							}
 						}
 					});
@@ -90,9 +92,13 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 			Future<Void> fut = Future.future(promise -> updateTopologyGraph(result, promise));
 			fut.setHandler(res -> {
 				if (res.succeeded()) {
+					JsonObject currentTopology = new JsonObject()
+							.put("nodes", nodes)
+							.put("links", links);
 					JsonObject ebPubMsg = new JsonObject()
 						.put("service", serviceName)
 						.put("content", currentTopology);
+					LOG.info("publish topology: "+ebPubMsg.encodePrettily());
 					eb.publish("nms.info.topology", ebPubMsg);
 				}
 			});
@@ -108,16 +114,17 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 	        	for (Capability c : res.result()) {
 	        		if (!c.getName().equals("topology")) {
 	        			continue;
-	        		}
-					if (!knownCaps.containsKey(c.getAgentId())) {
+	        		} else if (!knownCaps.containsKey(c.getAgentId())) {
 						knownCaps.put(c.getAgentId(), c);
 						newCaps.add(c);
-					} 
+					}
 					/*else if (!knownCaps.get(c.getAgentId()).getSchema().equals(c.getSchema())) {
 						knownCaps.put(c.getAgentId(), c);
 						newCaps.add(c);
 					}*/
 				}
+	        	LOG.info(newCaps.size()+" new capabilities discovered.");
+	        	LOG.info(knownCaps.size()+" already known capabilities.");
 	        	future.complete(newCaps);
 	        } else {
 	        	LOG.error("Failed to update topoloy capabilities", res.cause());
@@ -128,18 +135,40 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 	
 	protected void sendTopologySpecifications(List<Capability> caps) {
 		for (Capability c : caps) {
-			Specification spec = new Specification(c);
-			// specification will stop after 10mn, knownCaps is cleared every 10mn
+			/*long stopTime = Instant.now().plusSeconds(RESET_PERIOD_S).toEpochMilli();
+			c.setWhen("now ... "+String.valueOf(stopTime)+" / "+SPEC_PERIOD_MS);
+			JsonObject capability = new JsonObject(Message.toJsonString(c, false));
+			JsonObject params = new JsonObject()
+				.put("capability", capability);
+			
+			// use DSS
+			JsonObject ebMsg = new JsonObject()
+				.put("action", "send_specification")
+				.put("params", params);
+			eb.send("nms.dss", ebMsg, reply -> {
+				if (reply.succeeded()) {
+					JsonObject response = (JsonObject) reply.result().body();
+					if (response.containsKey("content")) {
+						JsonObject receipt = response
+							.getJsonObject("content")
+							.getJsonObject("receipt");
+						LOG.info("Rct: "+receipt.encodePrettily());
+					}
+				} else {
+					LOG.error("Failed to get Receipt", reply.cause());
+				}
+			});*/
+			
 			long stopTime = Instant.now().plusSeconds(RESET_PERIOD_S).toEpochMilli();
-			spec.setWhen("now ... "+String.valueOf(stopTime)+" / "+SPEC_PERIOD_MS);
-			spec.setTimestampNow();
+			c.setWhen("now ... "+String.valueOf(stopTime)+" / "+SPEC_PERIOD_MS);
+			Specification spec = new Specification(c);
 			
 			LOG.info("Spec: "+Message.toJsonString(spec, true));
 			
 			Future<Receipt> rct = Future.future(promise -> sendSpecification(spec, promise));
 			rct.setHandler(res -> {
 				if (res.succeeded()) {
-					LOG.info("Spec: "+Message.toJsonString(res.result(), true));
+					LOG.info("Rct: "+Message.toJsonString(res.result(), true));
 					if (!res.result().getErrors().isEmpty()) {
 						LOG.error("Error in Receipt from "+spec.getAgentId());
 					}
@@ -152,6 +181,31 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 	
 	private void updateTopologyGraph(Result res, Future<Void> future) {
 		LOG.info("update topology with result from: "+res.getAgentId());
+		
+		// support new nodes and links
+		/*boolean newNode = false;
+		if (!nodes.containsKey(res.getAgentId())) {
+			JsonObject node = new JsonObject()
+					.put("id",res.getAgentId())
+					.put("group", 1);
+			nodes.put(res.getAgentId(), node);
+			newNode = true;
+		}
+		if (newNode) {
+			int targetIndex = res.getResults().indexOf("toaddress");
+			List<List<String>> nodeTopo = res.getResultValues();
+			for (List<String> c : nodeTopo) {
+				JsonObject link = new JsonObject()
+						.put("source", res.getAgentId())
+						.put("target", c.get(targetIndex))
+						.put("value", 1);
+				links.add(link);
+			}
+		}*/
+		
+		// support update links for existent nodes
+		//...
+		
 		future.complete();
 	}
 	/*------------------------------------------------*/
