@@ -25,7 +25,7 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 	protected HashMap<String, Capability> knownCaps = new HashMap<String, Capability>();
 	protected Instant lastUpdate = Instant.now();
 	
-	protected HashMap<String, JsonObject> nodes = new HashMap<String, JsonObject>();
+	protected List<JsonObject> nodes = new ArrayList<JsonObject>();
 	protected List<JsonObject> links = new ArrayList<JsonObject>();
 	
 	public void start(Future<Void> fut) {
@@ -134,31 +134,7 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 	}
 	
 	protected void sendTopologySpecifications(List<Capability> caps) {
-		for (Capability c : caps) {
-			/*long stopTime = Instant.now().plusSeconds(RESET_PERIOD_S).toEpochMilli();
-			c.setWhen("now ... "+String.valueOf(stopTime)+" / "+SPEC_PERIOD_MS);
-			JsonObject capability = new JsonObject(Message.toJsonString(c, false));
-			JsonObject params = new JsonObject()
-				.put("capability", capability);
-			
-			// use DSS
-			JsonObject ebMsg = new JsonObject()
-				.put("action", "send_specification")
-				.put("params", params);
-			eb.send("nms.dss", ebMsg, reply -> {
-				if (reply.succeeded()) {
-					JsonObject response = (JsonObject) reply.result().body();
-					if (response.containsKey("content")) {
-						JsonObject receipt = response
-							.getJsonObject("content")
-							.getJsonObject("receipt");
-						LOG.info("Rct: "+receipt.encodePrettily());
-					}
-				} else {
-					LOG.error("Failed to get Receipt", reply.cause());
-				}
-			});*/
-			
+		for (Capability c : caps) {	
 			long stopTime = Instant.now().plusSeconds(RESET_PERIOD_S).toEpochMilli();
 			c.setWhen("now ... "+String.valueOf(stopTime)+" / "+SPEC_PERIOD_MS);
 			Specification spec = new Specification(c);
@@ -180,33 +156,83 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 	}
 	
 	private void updateTopologyGraph(Result res, Future<Void> future) {
-		LOG.info("update topology with result from: "+res.getAgentId());
-		
-		// support new nodes and links
-		/*boolean newNode = false;
-		if (!nodes.containsKey(res.getAgentId())) {
-			JsonObject node = new JsonObject()
-					.put("id",res.getAgentId())
-					.put("group", 1);
-			nodes.put(res.getAgentId(), node);
-			newNode = true;
+		// get node name and type
+		String[] nodeId = res.getAgentId().split("-");
+		String nodeName = nodeId[0];
+		String nodeType = "N/A";
+		if (nodeId.length > 1) {
+			nodeType = nodeId[1];
 		}
-		if (newNode) {
-			int targetIndex = res.getResults().indexOf("toaddress");
-			List<List<String>> nodeTopo = res.getResultValues();
-			for (List<String> c : nodeTopo) {
-				JsonObject link = new JsonObject()
-						.put("source", res.getAgentId())
-						.put("target", c.get(targetIndex))
-						.put("value", 1);
-				links.add(link);
-			}
-		}*/
 		
-		// support update links for existent nodes
-		//...
+		// add source node if does not exist
+		// with status = active
+		JsonObject snode = new JsonObject()
+			.put("name", nodeName)
+			.put("type", nodeType)
+			.put("status", "ACTIVE");
+		upsertNode(snode);
 		
+		int tg = res.getResults().indexOf("target");
+		int st = res.getResults().indexOf("status");
+		
+		// add links
+		for (List<String> r : res.getResultValues()) {
+			String tname = r.get(tg);
+			String lstatus = r.get(st);
+
+			// add target node if does not exist
+			// with status = active
+			JsonObject tnode = new JsonObject()
+				.put("name", tname)
+				.put("type", "N/A")
+				.put("status", "INACTIVE");
+			upsertNode(tnode);
+			
+			JsonObject link = new JsonObject()
+				.put("sname", nodeName)
+				.put("tname", tname)
+				.put("status", lstatus);
+			upsertLink(link);
+		}
 		future.complete();
+	}
+	
+	private void upsertLink(JsonObject link) {
+		String newSname = link.getString("sname");
+		String newTname = link.getString("tname");
+		int linkFound = -1;
+		int i = 0;
+		for (JsonObject l : links) {
+			String sname = l.getString("sname");
+			String tname = l.getString("tname");
+			if((sname.equals(newSname) && tname.equals(newTname))||(sname.equals(newTname)&&tname.equals(newSname))) {
+				linkFound = i;
+				break;
+			}
+			i++;
+		}
+		if (linkFound >= 0) {
+			links.set(linkFound, link);
+		} else {
+			links.add(link);
+		}
+	}
+	
+	private void upsertNode(JsonObject node) {
+		int nodeFound = -1;
+		int i = 0;
+		for (JsonObject n : nodes) {
+			if(n.getString("name").equals(node.getString("name"))) {
+				nodeFound = i;
+				break;
+			}
+			i++;
+		}
+		if (nodeFound >= 0) {
+			nodes.set(nodeFound, node);
+		} else {
+			nodes.add(node);
+		}
 	}
 	/*------------------------------------------------*/
 	
