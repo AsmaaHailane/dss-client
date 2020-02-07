@@ -229,7 +229,9 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 			i++;
 		}
 		if (nodeFound >= 0) {
-			nodes.set(nodeFound, node);
+			if (nodes.get(nodeFound).getString("type").equals("N/A")) {
+				nodes.set(nodeFound, node);
+			}
 		} else {
 			nodes.add(node);
 		}
