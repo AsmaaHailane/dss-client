@@ -17,9 +17,9 @@ import io.vertx.core.json.JsonObject;
 
 public class TopologyServiceVerticle extends AmqpVerticle {
 	
-	private static final int TOPO_UPDATE_PERIOD_MS = 20000;
-	private static final int RESET_PERIOD_S = 600;
-	private static final int SPEC_PERIOD_MS = 10000;
+	private static final int TOPO_UPDATE_PERIOD_MS = 10000;
+	private static final int RESET_PERIOD_S = 60;
+	private static final int SPEC_PERIOD_MS = 5000;
 	
 	protected String serviceName = "nms.topology";
 	protected HashMap<String, Capability> knownCaps = new HashMap<String, Capability>();
@@ -40,6 +40,7 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 					// reset known capabilities every 10mn
 					if (lastUpdate.plusSeconds(RESET_PERIOD_S).isBefore(Instant.now())) {
 						LOG.info("Reset discovered capabilities");
+						resetTopology();
 						knownCaps.clear();
 						lastUpdate = Instant.now();
 					}
@@ -229,11 +230,20 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 			i++;
 		}
 		if (nodeFound >= 0) {
-			if (nodes.get(nodeFound).getString("type").equals("N/A")) {
+			if (nodes.get(nodeFound).getString("status").equals("INACTIVE")) {
 				nodes.set(nodeFound, node);
 			}
 		} else {
 			nodes.add(node);
+		}
+	}
+	
+	private void resetTopology() {
+		for (JsonObject n : nodes) {
+			n.put("status", "INACTIVE");
+		}
+		for (JsonObject l : links) {
+			l.put("status", "DOWN");
 		}
 	}
 	/*------------------------------------------------*/

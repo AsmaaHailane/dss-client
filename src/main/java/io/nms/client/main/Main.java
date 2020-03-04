@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import io.nms.client.cli.Console;
 import io.nms.client.common.BaseClientVerticle;
 import io.nms.client.common.DataServiceVerticle;
+import io.nms.client.common.RoutingServiceVerticle;
 import io.nms.client.common.TopologyServiceVerticle;
 import io.nms.storage.StorageVerticle;
 import io.vertx.core.CompositeFuture;
@@ -87,6 +88,24 @@ public class Main {
 				}
 			});
 		
+		// deploy topology service
+		Future<Void> deployFuture5 = Future.future();
+		futures.add(deployFuture5);
+		BaseClientVerticle vRoutingService = new RoutingServiceVerticle();
+		vertx.deployVerticle(vRoutingService, new DeploymentOptions()
+			.setWorker(true)
+			.setConfig(vertConfig),
+			res -> {
+				if (res.succeeded()) {
+					LOG.info("Routing Service deployed.");
+					verticles.add(vRoutingService);
+					deployFuture5.complete();
+				} else {
+					LOG.error("Failed to deploy RoutingServiceVerticle", res.cause());
+					deployFuture5.fail(res.cause());
+				}
+			});
+		
 		// deploy storage service
 		Future<Void> deployFuture3 = Future.future();
 		futures.add(deployFuture3);
@@ -112,7 +131,6 @@ public class Main {
 			res -> {
 				if (res.succeeded()) {
 					LOG.info("REST Service deployed.");
-					verticles.add(vDataService);
 					deployFuture4.complete();
 				} else {
 					LOG.error("Failed to deploy REST service", res.cause());
