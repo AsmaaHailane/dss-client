@@ -1,6 +1,7 @@
 package io.nms.client.common;
 
 import java.util.List;
+import java.util.Random;
 
 import io.nms.messages.Capability;
 import io.nms.messages.Interrupt;
@@ -17,6 +18,7 @@ import io.vertx.core.json.JsonObject;
 
 public abstract class AmqpVerticle extends BaseClientVerticle {
 	private AmqpConnection connection = null;
+	private Random rand = new Random(); 
 	
 	/* Create AMQP connection to the broker */
 	protected void createAmqpConnection(String host, int port, Future<Void> promise) {
@@ -65,7 +67,7 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 						req.put("password", password);
 						sender.result().send(AmqpMessage.create()
 						  .replyTo(replyToAddress)
-						  .id("2")
+						  .id(String.valueOf(rand.nextInt(10000)))
 						  .withBody(req.encode())
 						  .build());
 						LOG.info("Authenticating...");										
@@ -80,12 +82,17 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 	}
 	
 	/* Client is sender. req-rep to retrieve Caps. */
-	public void discoverCapabilities(Future<List<Capability>> promise) {
+	protected void discoverCapabilities(Future<List<Capability>> promise) {
 		connection.createDynamicReceiver(replyReceiver -> {
 			if (replyReceiver.succeeded()) {
 				String replyToAddress = replyReceiver.result().address();
 				replyReceiver.result().handler(msg -> {
-					promise.complete(Message.toListfromString(msg.bodyAsString()));
+					//JsonObject ebRep = new JsonObject(msg.bodyAsString());
+					//if (ebRep.containsKey("error")) {
+					//	promise.fail(ebRep.getString("error"));
+					//} else {
+						promise.complete(Message.toListfromString(msg.bodyAsString()));
+					//}
 				});
 				connection.createSender("/client/capabilities", sender -> {
 					if (sender.succeeded()) {
@@ -93,7 +100,7 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 						req.put("client_role", clientRole);
 						sender.result().send(AmqpMessage.create()
 					      .replyTo(replyToAddress)
-					      .id("100")
+					      .id(String.valueOf(rand.nextInt(10000)))
 					      .withBody(req.encode())
 					      .build());
 					}
@@ -103,7 +110,7 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 	}
 	
 	/* Client is sender. req-rep to issue Spec. */
-	public void sendSpecification(Specification spec, Future<Receipt> promise) { 
+	protected void sendSpecification(Specification spec, Future<Receipt> promise) { 
 		spec.setToken(clientName);
 		connection.createDynamicReceiver(replyReceiver -> {
 			if (replyReceiver.succeeded()) {
@@ -128,7 +135,7 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 					if (sender.succeeded()) {
 						sender.result().send(AmqpMessage.create()
 						  .replyTo(replyToAddress)
-						  .id("10")
+						  .id(String.valueOf(rand.nextInt(10000)))
 						  .withBody(Message.toJsonString(spec, false)).build());
 					}
 				});
@@ -155,9 +162,9 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 				}
 			});
 	}
-	
+
 	/* Client is sender. req-rep to retrieve Caps. */
-	public void sendInterrupt(Interrupt itr, Future<Receipt> promise) {
+	protected void sendInterrupt(Interrupt itr, Future<Receipt> promise) {
 		connection.createDynamicReceiver(replyReceiver -> {
 			if (replyReceiver.succeeded()) {
 				String replyToAddress = replyReceiver.result().address();
@@ -168,7 +175,7 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 					if (sender.succeeded()) {
 						sender.result().send(AmqpMessage.create()
 					      .replyTo(replyToAddress)
-					      .id("100")
+					      .id(String.valueOf(rand.nextInt(10000)))
 					      .withBody(Message.toJsonString(itr, false)).build());
 					}
 				});
@@ -179,7 +186,7 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 	/* Client is sender. req-rep to send Admin requests. 
 	 * json request is set by caller; console, GUI.
 	 * */
-	public void sendAdminReq(JsonObject req, Future<String> promise) { 
+	protected void sendAdminReq(JsonObject req, Future<String> promise) { 
 		//LOG.info("sending admin req: "+req.encodePrettily());
 		connection.createDynamicReceiver(replyReceiver -> {
 			if (replyReceiver.succeeded()) {
@@ -191,7 +198,7 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 					if (sender.succeeded()) {
 						sender.result().send(AmqpMessage.create()
 					      .replyTo(replyToAddress)
-					      .id("101")
+					      .id(String.valueOf(rand.nextInt(10000)))
 					      .withBody(req.encode())
 					      .build());
 					} else {

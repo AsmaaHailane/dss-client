@@ -1,329 +1,79 @@
 package io.nms.client.common;
 
-import java.util.Arrays;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import io.nms.client.cli.ResultListener;
 import io.nms.messages.Capability;
 import io.nms.messages.Interrupt;
 import io.nms.messages.Receipt;
 import io.nms.messages.Specification;
+import io.nms.storage.NmsEbMessage;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
 import io.vertx.core.eventbus.EventBus;
-import io.vertx.core.eventbus.Message;
-import io.vertx.core.http.HttpMethod;
-import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
-import io.vertx.ext.web.Router;
-import io.vertx.ext.web.handler.CorsHandler;
-import io.vertx.ext.web.handler.sockjs.BridgeOptions;
-import io.vertx.ext.web.handler.sockjs.PermittedOptions;
-import io.vertx.ext.web.handler.sockjs.SockJSHandler;
 
 
 public abstract class BaseClientVerticle extends AbstractVerticle {
 	protected Logger LOG = LoggerFactory.getLogger(BaseClientVerticle.class);
-	protected ResultListener rListener = null;
 	
+	protected String serviceName = "";
 	protected String clientName = "";
 	protected String clientRole = "";
 	
-	protected abstract void requestAuthentication(String uname, String pass, Future<Void> prom);
-	protected abstract void subscribeToResults(Receipt rct, Future<Void> prom);
-	public abstract void discoverCapabilities(Future<List<Capability>> prom);
-	public abstract void sendSpecification(Specification spec, Future<Receipt> prom);
-	public abstract void sendInterrupt(Interrupt itr, Future<Receipt> prom); 
-	public abstract void sendAdminReq(JsonObject req, Future<String> promise);
-	
 	protected HashMap<String, Receipt> activeSpecs = new HashMap<String, Receipt>();
 	
-	private static final String ADDRESS = "client.*";
-	
 	EventBus eb = null;
+	
+	// implemented by AmqpVerticle
+	protected abstract void createAmqpConnection(String host, int port, Future<Void> promise);
+	protected abstract void requestAuthentication(String uname, String pass, Future<Void> prom);
+	protected abstract void subscribeToResults(Receipt rct, Future<Void> prom);
+	protected abstract void discoverCapabilities(Future<List<Capability>> prom);
+	protected abstract void sendSpecification(Specification spec, Future<Receipt> prom);
+	protected abstract void sendInterrupt(Interrupt itr, Future<Receipt> prom); 
+	protected abstract void sendAdminReq(JsonObject req, Future<String> promise);
+		
+	// implemented by XxxServiceVerticle
+	protected abstract void processResult(io.nms.messages.Message fromJsonString);
+	protected abstract void setServiceApi();
 
 	@Override
-	public void start() {
-		eb = vertx.eventBus();
-		Router router = Router.router(vertx);
+	public void start(Future<Void> fut) {
+		String uname = config().getJsonObject("client").getString("username", "");
+		String pass = config().getJsonObject("client").getString("password", "");
+	
+		String host = config().getJsonObject("amqp").getString("host", "");
+		int port = config().getJsonObject("amqp").getInteger("port", 0);
 		
-		SockJSHandler sockJSHandler = SockJSHandler.create(vertx);
-		BridgeOptions bridgeOptions = new BridgeOptions()
-				.addInboundPermitted(new PermittedOptions().setAddressRegex(ADDRESS))
-				.addOutboundPermitted(new PermittedOptions().setAddressRegex(ADDRESS));
-		sockJSHandler.bridge(bridgeOptions);
-
-		Set<String> allowedHeaders = new HashSet<>();
-		allowedHeaders.add("x-requested-with");
-		allowedHeaders.add("Access-Control-Allow-Origin");
-		allowedHeaders.add("origin");
-		allowedHeaders.add("Content-Type");
-		allowedHeaders.add("accept");
-		allowedHeaders.add("X-PINGARUNER");
-
-		CorsHandler corsHandler = CorsHandler.create("http://10.11.200.213:8080").allowedHeaders(allowedHeaders)
-				.allowCredentials(true);
-		
-		Arrays.asList(HttpMethod.values()).stream().forEach(method -> corsHandler.allowedMethod(method));
-		router.route().handler(corsHandler);
-
-		router.route("/eventbus/*").handler(sockJSHandler);
-		
-		vertx.createHttpServer().requestHandler(router::accept).listen(9000);
-
-		/* make API... */
-		eb.consumer("client", message -> {
-			String action = message.headers().get("action");
-			//JsonObject payload = ((JsonObject) message.body());
-			//LOG.info("Eventbus message: "+action+ " | " +payload.encodePrettily());
-			
-			switch (action)
-			{
-			case "get.clientId":
-				getClientId(message);
-				break;	
-				
-			case "get.capabilities":
-				getCapabilities(message);
-				break;		
-
-			case "send.specification":
-				sendSpecification(message);
-				break;
-			
-			// result read/delete
-			case "get_all_operations":
-				toResultsStorageAPI(message); 
-				break;
-			case "get_results_operation":
-				toResultsStorageAPI(message); 
-				break;
-			case "get_result_id":
-				toResultStorageAPI(message); 
-				break;
-				
-			case "del_results_operation":
-				toResultStorageAPI(message); 
-				break;
-			case "del_result_id":
-				toResultStorageAPI(message); 
-				break;
-				
-			// interrupt
-			case "send.interrupt":
-				sendInterrupt(message);
-				break;
-				
-			case "get.clients":
-				getClients(message);
-				break;
-				
-			case "get.agents":
-				getAgents(message); 
-				break;
-				
-			case "get.stats":
-				getStats(message); 
-				break;
-			
-			default:
-				message.reply("");
+		Future<Void> futConn = Future.future(promise -> createAmqpConnection(host, port, promise));
+		Future<Void> futAuth = futConn
+			.compose(v -> {
+				return Future.<Void>future(promise -> requestAuthentication(uname, pass, promise));
+			});
+		futAuth.setHandler(res -> {
+			if (res.failed()) {
+				fut.fail(res.cause());
+			} else {
+				eb = vertx.eventBus();
+				setServiceApi();
+				fut.complete();
 			}
 		});
 	}
 	
-	protected void getClientId(Message<Object> message) {
-		JsonObject clientId = new JsonObject()
+	protected void getServiceInfo(NmsEbMessage message) {
+		JsonObject response = new JsonObject();
+		response.put("service", serviceName);
+		
+		JsonObject content = new JsonObject()
 			.put("name", clientName)
 	        .put("role", clientRole);
-		message.reply(new JsonObject().put("client", clientId));	      
-	}
-	
-	protected void getCapabilities(Message<Object> message) {
-		Future<List<Capability>> fut = Future.future(promise -> discoverCapabilities(promise));
-		fut.setHandler(res -> {
-	        if (res.succeeded()) {
-	        	String caps = io.nms.messages.Message.toStringFromList(res.result());
-	        	JsonObject json = new JsonObject().put("capabilities", caps);
-	        	message.reply(json);	      
-	        } else {
-	        	LOG.error("Failed to get Capabilities", res.cause());
-	        	message.reply(new JsonObject().put("capabilities", new JsonObject()));
-	        }
-		});
-	}
-	
-	protected void getAgents(Message<Object> message) {
-		JsonObject req = new JsonObject();
-    	req.put("action", "get_all_agents");
-    	req.put("payload", new JsonObject());
-    	Future<String> fut = Future
-    		.future(promise -> sendAdminReq(req, promise));
-		fut.setHandler(res -> {
-	        if (res.succeeded()) {
-	        	JsonObject r = new JsonObject(res.result());
-	        	message.reply(new JsonObject().put("agents", r.getJsonArray("payload")));
-	        } else {
-	        	LOG.error("Failed to get Agents", res.cause());
-	        	message.reply(new JsonObject().put("agents", new JsonObject()));
-	        }
-	    });
-	}
-	
-	protected void getClients(Message<Object> message) {
-		JsonObject req = new JsonObject();
-    	req.put("action", "get_all_clients");
-    	req.put("payload", new JsonObject());
-    	Future<String> fut = Future
-    			.future(promise -> sendAdminReq(req, promise));
-		fut.setHandler(res -> {
-	        if (res.succeeded()) {
-	        	JsonObject r = new JsonObject(res.result());
-	        	message.reply(new JsonObject().put("clients", r.getJsonArray("payload")));
-	        } else {
-	        	LOG.error("Failed to get Clients", res.cause());
-	        	message.reply(new JsonObject().put("clients", new JsonObject()));
-	        }
-	    });
-	}
-	
-	
-	protected void sendSpecification(Message<Object> message) {
-		JsonObject payload = ((JsonObject) message.body());
-		String strCap = payload.getString("capability");
-		Capability cap = (Capability) io.nms.messages.Message.fromJsonString(strCap);
-		Specification spec = new Specification(cap);
-		//LOG.info("Send Specification: "+io.nms.messages.Message.toJsonString(spec, true));
-		Future<Receipt> fut = Future.future(rct -> sendSpecification(spec, rct));
-		fut.setHandler(res -> {
-	        if (res.succeeded()) {
-	        	message.reply(io.nms.messages.Message.toJsonString(res.result(), false));
-	        } else {
-	        	LOG.error("Failed to get Receipt", res.cause());
-	        	message.reply("");
-	        }
-	    });
-	}
-	
-	/*------------------------ manage results: eventbus API ------------------------------------*/
-	protected void toResultsStorageAPI(Message<Object> message) {
-		// to customMessage format...
-    	JsonObject toStorageMsg = new JsonObject()
-    		.put("action", message.headers().get("action"))
-    		.put("payload", (JsonObject) message.body());
-    	eb.send("dss.storage", toStorageMsg, reply -> {
-    		if (reply.succeeded()) {
-    			LOG.info( ((JsonArray)reply.result().body()).encodePrettily());
-    			message.reply((JsonArray)reply.result().body());
-    		} else {
-    			LOG.error("get_all_operations failed.", reply.cause());
-	        	message.reply(new JsonArray());
-    		}
-    	});
-	}
-	
-	protected void toResultStorageAPI(Message<Object> message) {
-		// to customMessage format...
-    	JsonObject toStorageMsg = new JsonObject()
-    		.put("action", message.headers().get("action"))
-    		.put("payload", (JsonObject) message.body());
-    	eb.send("dss.storage", toStorageMsg, reply -> {
-    		if (reply.succeeded()) {
-    			message.reply((JsonObject)reply.result().body());
-    			//LOG.info(((JsonObject)reply.result()).encodePrettily());
-    		} else {
-    			LOG.error("get_all_operations failed.", reply.cause());
-	        	message.reply(new JsonObject());
-    		}
-    	});
-	}
-	
-	/*protected void getResultsByOperation(Message<Object> message) {
-		JsonObject payload = ((JsonObject) message.body());
-    	JsonObject toStorageMsg = new JsonObject()
-    		.put("action", "get_results_operation")
-    		.put("payload", payload);
-    	eb.send("dss.storage", toStorageMsg, reply -> {
-    		if (reply.succeeded()) {
-    			message.reply((String) reply.result().body());
-    		} else {
-    			LOG.error("get_results_by_operation failed", reply.cause());
-	        	message.reply("");
-    		}
-    	});
-	}*/
-	/*----------------------------------------------------------------------------*/
-	
-	protected void sendInterrupt(Message<Object> message) {
-		JsonObject payload = ((JsonObject) message.body());
-		String rctSchema = payload.getString("receipt.schema");
-		if (activeSpecs.containsKey(rctSchema)) {
-			Interrupt interrupt = new Interrupt(activeSpecs.get(rctSchema));
-			LOG.info("Send Interrupt: "+io.nms.messages.Message.toJsonString(interrupt, true));
-			Future<Receipt> fut = Future.future(rct -> sendInterrupt(interrupt, rct));
-			fut.setHandler(res -> {
-				if (res.succeeded()) {
-					activeSpecs.remove(rctSchema);
-					message.reply(io.nms.messages.Message.toJsonString(res.result(), false));	        	
-				} else {
-					LOG.error("Failed to get Receipt", res.cause());
-					message.reply("");
-				}
-			});
-		}
-	}
-	
-	protected void processResult(io.nms.messages.Message res) {
-		// filter results by schema
-		if (activeSpecs.containsKey(res.getSchema())) {
-			String resStr = io.nms.messages.Message.toJsonString(res, false);
-			LOG.info("Got Result: "+resStr);
-		
-			// send to Console
-			if (this.rListener != null) {
-				this.rListener.onResult(res);
-			}
-		
-			// send to GUI over eventbus
-			eb.send("client.result", resStr);
-		
-			// send to storage over eventbus
-			JsonObject message = new JsonObject()
-				.put("action", "add_result")
-				.put("payload", new JsonObject(resStr));
-			eb.send("dss.storage", message, reply -> {
-				if (reply.succeeded()) {
-					LOG.info("Result stored.");
-				}
-			});
-		}
-	}
-	
-	protected void getStats(Message<Object> message) {
-		JsonObject req = new JsonObject();
-    	req.put("action", "get_stats");
-    	req.put("payload", new JsonObject());
-    	Future<String> fut = Future
-    			.future(promise -> sendAdminReq(req, promise));
-		fut.setHandler(res -> {
-	        if (res.succeeded()) {
-	        	JsonObject r = new JsonObject(res.result());
-	        	message.reply(new JsonObject().put("stats", r));
-	        } else {
-	        	LOG.error("Failed to get Clients", res.cause());
-	        	message.reply(new JsonObject().put("stats", new JsonObject()));
-	        }
-	    });
-	}
-	  
-	public void registerResultListener(ResultListener rl) {
-		this.rListener = rl;
+		response.put("content", content);
+		message.reply(response);	      
 	}
 	
 	@Override
