@@ -2,8 +2,8 @@
 	"client" : 
 	{
   	"name": "/",
-      "username": "amar0",
-      "password": "amar0"
+      "username": "client0",
+      "password": "client0"
 	},
   	"amqp": 
   	{

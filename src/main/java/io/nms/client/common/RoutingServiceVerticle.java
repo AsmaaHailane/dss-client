@@ -115,7 +115,7 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 				break;
 
 			default:
-				message.reply("");
+				replyUnknownAction(nmsEbMsg);
 			}
 		});
 	}
@@ -177,6 +177,13 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 	/*------------------------------------------------*/
 	
 	/*--------------- API functions ----------------*/
+	protected void replyUnknownAction(NmsEbMessage message) {
+		JsonObject response = new JsonObject();
+		response.put("service", serviceName);
+		response.put("action", message.getAction());
+		response.put("error", "unknown action");
+		message.reply(response);	      
+	}
 	
 	protected void getAllRegPref(NmsEbMessage message) {
 		JsonObject response = new JsonObject();

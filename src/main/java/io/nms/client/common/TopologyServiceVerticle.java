@@ -74,13 +74,9 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 			{
 			case "get_service_info":
 				getServiceInfo(nmsEbMsg);
-				break;	
-			case "get_topology":
-				getTopology(nmsEbMsg);
 				break;
-
 			default:
-				message.reply("");
+				replyUnknownAction(nmsEbMsg);
 			}
 		});
 	}
@@ -249,13 +245,14 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 	/*------------------------------------------------*/
 	
 	/*--------------- API functions ----------------*/
-	
-	protected void getTopology(NmsEbMessage message) {
+	protected void replyUnknownAction(NmsEbMessage message) {
 		JsonObject response = new JsonObject();
 		response.put("service", serviceName);
-		response.put("content", new JsonObject());
-		message.reply(response);
+		response.put("action", message.getAction());
+		response.put("error", "unknown action");
+		message.reply(response);	      
 	}
+	
 	/*----------------------------------------------*/
 	
 	@Override

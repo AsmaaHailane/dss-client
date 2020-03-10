@@ -201,17 +201,4 @@ public class Main {
         });
 	}
 }
-
-/*
- String[] deployId = {""};
-		final Future<Void> storagefut = Future.future();
-		vertx.deployVerticle(StorageVerticle.class.getName(), res -> {
-			if (res.failed()) {
-				LOG.error("Failed to deploy storage module", res.cause());
-				storagefut.fail(res.cause());
-			} else {
-				deployId[0] = res.result();
-				storagefut.complete();
-			}
-		});*/
   
