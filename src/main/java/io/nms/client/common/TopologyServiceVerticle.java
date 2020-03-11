@@ -12,11 +12,12 @@ import io.nms.messages.Result;
 import io.nms.messages.Specification;
 import io.nms.storage.NmsEbMessage;
 import io.vertx.core.Future;
+import io.vertx.core.WorkerExecutor;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 
 public class TopologyServiceVerticle extends AmqpVerticle {
-	
+	private WorkerExecutor executor;
 	private static final int TOPO_UPDATE_PERIOD_MS = 10000;
 	private static final int RESET_PERIOD_S = 60;
 	private static final int SPEC_PERIOD_MS = 5000;
@@ -29,6 +30,7 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 	protected List<JsonObject> links = new ArrayList<JsonObject>();
 	
 	public void start(Future<Void> fut) {
+		executor = getVertx().createSharedWorkerExecutor("vert.x-new-internal-blocking", 20);
 		Future<Void> futBase = Future.future(promise -> super.start(promise));
 		futBase.setHandler(res -> {
 			if (res.failed()) {
@@ -74,6 +76,9 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 			{
 			case "get_service_info":
 				getServiceInfo(nmsEbMsg);
+				break;
+			case "get_topology":
+				getTopology(nmsEbMsg);
 				break;
 			default:
 				replyUnknownAction(nmsEbMsg);
@@ -251,6 +256,30 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 		response.put("action", message.getAction());
 		response.put("error", "unknown action");
 		message.reply(response);	      
+	}
+	
+	protected void getTopology(NmsEbMessage message) {
+		JsonObject toStorageMsg = new JsonObject()
+			.put("action", "get_topology")
+			.put("params", new JsonObject());
+		
+		executor.executeBlocking(future -> {
+			eb.send("nms.storage", toStorageMsg, reply -> {
+				if (reply.succeeded()) {
+					JsonObject response = (JsonObject)reply.result().body();
+					response.put("service", serviceName);
+					response.put("action", message.getAction());
+					message.reply(response);
+				} else {
+					JsonObject response = new JsonObject();
+					response.put("service", serviceName);
+					response.put("action", message.getAction());
+					response.put("error", reply.cause());
+					message.reply(response);
+			    }
+				future.complete();
+			});						     
+        }, result -> {});
 	}
 	
 	/*----------------------------------------------*/
