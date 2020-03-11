@@ -110,7 +110,9 @@ public class Main {
 		Future<Void> deployFuture3 = Future.future();
 		futures.add(deployFuture3);
 		StorageVerticle vStorageService = new StorageVerticle();
-		vertx.deployVerticle(vStorageService,
+		vertx.deployVerticle(vStorageService, new DeploymentOptions()
+			.setWorker(true)
+			.setConfig(vertConfig),
 			res -> {
 				if (res.succeeded()) {
 					LOG.info("Storage Service deployed.");
