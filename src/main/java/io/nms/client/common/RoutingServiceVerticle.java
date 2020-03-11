@@ -66,7 +66,7 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 	
 	// routing listens to updates from topology service
 	protected void setTopologyListener() {
-		eb.consumer("nms.topology", message -> {
+		eb.consumer("nms.info.topology", message -> {
 			NmsEbMessage nmsEbMsg = new NmsEbMessage(message);
 			LOG.info("[" + serviceName + "] got topology update.");
 			// TODO: update links and nodes...
