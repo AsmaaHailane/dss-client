@@ -11,9 +11,9 @@ import org.json.simple.parser.ParseException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import io.nms.client.cli.Console;
 import io.nms.client.common.BaseClientVerticle;
 import io.nms.client.common.DataServiceVerticle;
+import io.nms.client.common.RestAPIVerticle;
 import io.nms.client.common.RoutingServiceVerticle;
 import io.nms.client.common.TopologyServiceVerticle;
 import io.nms.storage.StorageVerticle;
@@ -126,7 +126,7 @@ public class Main {
 		// deploy REST service
 		Future<Void> deployFuture4 = Future.future();
 		futures.add(deployFuture4);
-		Console vConsole = new Console();
+		RestAPIVerticle vConsole = new RestAPIVerticle();
 		vertx.deployVerticle(vConsole, new DeploymentOptions()
 			.setWorker(true)
 			.setConfig(vertConfig),

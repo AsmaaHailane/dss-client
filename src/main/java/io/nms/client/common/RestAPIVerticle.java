@@ -1,4 +1,4 @@
-package io.nms.client.cli;
+package io.nms.client.common;
 
 import java.util.Arrays;
 import java.util.HashSet;
@@ -20,9 +20,9 @@ import io.vertx.ext.web.handler.sockjs.BridgeOptions;
 import io.vertx.ext.web.handler.sockjs.PermittedOptions;
 import io.vertx.ext.web.handler.sockjs.SockJSHandler;
 
-public class Console extends AbstractVerticle {
+public class RestAPIVerticle extends AbstractVerticle {
 	
-	private static final Logger LOG = LoggerFactory.getLogger(Console.class);
+	private static final Logger LOG = LoggerFactory.getLogger(RestAPIVerticle.class);
 	private EventBus eb = null;
 	private HttpServer hs = null;
 	private int port = 9090;
