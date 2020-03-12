@@ -12,6 +12,7 @@ import io.nms.messages.Result;
 import io.nms.messages.Specification;
 import io.nms.storage.NmsEbMessage;
 import io.vertx.core.Future;
+import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 
 public class TopologyServiceVerticle extends AmqpVerticle {
@@ -72,6 +73,30 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 			{
 			case "get_service_info":
 				getServiceInfo(nmsEbMsg);
+				break;
+			case "add_node":
+				addNode(nmsEbMsg);
+				break;
+			case "get_node":
+				getNode(nmsEbMsg);
+				break;
+			case "add_link":
+				addLink(nmsEbMsg);
+				break;
+			case "get_link":
+				getLink(nmsEbMsg);
+				break;
+			case "get_all_nodes":
+				getAllNodes(nmsEbMsg);
+				break;
+			case "get_all_links":
+				getAllLinks(nmsEbMsg);
+				break;
+			case "del_node":
+				deleteNode(nmsEbMsg);
+				break;
+			case "del_link":
+				deleteLink(nmsEbMsg);
 				break;
 			case "get_topology":
 				getTopology(nmsEbMsg);
@@ -254,25 +279,281 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 		message.reply(response);	      
 	}
 	
+	protected void addNode(NmsEbMessage message) {
+		JsonObject params = message.getParams();
+		if (params.getString("name","").isEmpty()) {
+			JsonObject response = new JsonObject();
+			response.put("service", serviceName);
+			response.put("action", message.getAction());
+			response.put("error", "node name not specified");
+			message.reply(response);
+			return;
+		}
+		if (params.getJsonArray("itfs", new JsonArray()).isEmpty()) {
+			JsonObject response = new JsonObject();
+			response.put("service", serviceName);
+			response.put("action", message.getAction());
+			response.put("error", "node must have at least on interface");
+			message.reply(response);
+			return;
+		}
+		if (!params.containsKey("agent")) {
+			params.put("agent", "");
+		}
+		params.put("status", "pending");
+		
+		JsonObject toStorageMsg = new JsonObject()
+				.put("action", "add_node")
+				.put("params", params);
+
+		eb.send("nms.storage", toStorageMsg, reply -> {
+			if (reply.succeeded()) {
+				JsonObject response = (JsonObject)reply.result().body();
+				response.put("service", serviceName);
+				response.put("action", message.getAction());
+				message.reply(response);
+			} else {
+				JsonObject response = new JsonObject();
+				response.put("service", serviceName);
+				response.put("action", message.getAction());
+				response.put("error", reply.cause());
+				message.reply(response);
+			}
+		});
+	}
+	protected void getNode(NmsEbMessage message) {
+		JsonObject params = message.getParams();
+		if (params.getString("_id","").isEmpty()) {
+			JsonObject response = new JsonObject();
+			response.put("service", serviceName);
+			response.put("action", message.getAction());
+			response.put("error", "node Id not specified");
+			message.reply(response);
+			return;
+		}
+		
+		JsonObject toStorageMsg = new JsonObject()
+			.put("action", "get_node")
+			.put("params", params);
+
+		eb.send("nms.storage", toStorageMsg, reply -> {
+			if (reply.succeeded()) {
+				JsonObject response = (JsonObject)reply.result().body();
+				response.put("service", serviceName);
+				response.put("action", message.getAction());
+				message.reply(response);
+			} else {
+				JsonObject response = new JsonObject();
+				response.put("service", serviceName);
+				response.put("action", message.getAction());
+				response.put("error", reply.cause());
+				message.reply(response);
+			}
+		});
+	}
+	protected void addLink(NmsEbMessage message) {
+		/* TODO: check node id existence */
+		JsonObject params = message.getParams();
+		if (params.getString("source","").isEmpty() || params.getString("target","").isEmpty()) {
+			JsonObject response = new JsonObject();
+			response.put("service", serviceName);
+			response.put("action", message.getAction());
+			response.put("error", "link must have source and target node name");
+			message.reply(response);
+			return;
+		}
+		params.put("status", "pending");
+		
+		JsonObject toStorageMsg = new JsonObject()
+			.put("action", "add_link")
+			.put("params", params);
+
+		eb.send("nms.storage", toStorageMsg, reply -> {
+			if (reply.succeeded()) {
+				JsonObject response = (JsonObject)reply.result().body();
+				response.put("service", serviceName);
+				response.put("action", message.getAction());
+				message.reply(response);
+			} else {
+				JsonObject response = new JsonObject();
+				response.put("service", serviceName);
+				response.put("action", message.getAction());
+				response.put("error", reply.cause());
+				message.reply(response);
+			}
+		});		
+	}
+	protected void getLink(NmsEbMessage message) {
+		JsonObject params = message.getParams();
+		if (params.getString("_id","").isEmpty()) {
+			JsonObject response = new JsonObject();
+			response.put("service", serviceName);
+			response.put("action", message.getAction());
+			response.put("error", "link Id not specified");
+			message.reply(response);
+			return;
+		}
+		
+		JsonObject toStorageMsg = new JsonObject()
+			.put("action", "get_link")
+			.put("params", params);
+
+		eb.send("nms.storage", toStorageMsg, reply -> {
+			if (reply.succeeded()) {
+				JsonObject response = (JsonObject)reply.result().body();
+				response.put("service", serviceName);
+				response.put("action", message.getAction());
+				message.reply(response);
+			} else {
+				JsonObject response = new JsonObject();
+				response.put("service", serviceName);
+				response.put("action", message.getAction());
+				response.put("error", reply.cause());
+				message.reply(response);
+			}
+		});		
+	}
+	protected void getAllNodes(NmsEbMessage message) {
+		JsonObject toStorageMsg = new JsonObject()
+			.put("action", "get_all_nodes")
+			.put("params", new JsonObject());
+
+		eb.send("nms.storage", toStorageMsg, reply -> {
+			if (reply.succeeded()) {
+				JsonObject response = (JsonObject)reply.result().body();
+				response.put("service", serviceName);
+				response.put("action", message.getAction());
+				message.reply(response);
+			} else {
+				JsonObject response = new JsonObject();
+				response.put("service", serviceName);
+				response.put("action", message.getAction());
+				response.put("error", reply.cause());
+				message.reply(response);
+			}
+		});
+	}
+	protected void getAllLinks(NmsEbMessage message) {
+		JsonObject toStorageMsg = new JsonObject()
+			.put("action", "get_all_links")
+			.put("params", new JsonObject());
+
+		eb.send("nms.storage", toStorageMsg, reply -> {
+			if (reply.succeeded()) {
+				JsonObject response = (JsonObject)reply.result().body();
+				response.put("service", serviceName);
+				response.put("action", message.getAction());
+				message.reply(response);
+			} else {
+				JsonObject response = new JsonObject();
+				response.put("service", serviceName);
+				response.put("action", message.getAction());
+				response.put("error", reply.cause());
+				message.reply(response);
+			}
+		});		
+	}
+	protected void deleteNode(NmsEbMessage message) {
+		JsonObject params = message.getParams();
+		if (params.getString("_id","").isEmpty()) {
+			JsonObject response = new JsonObject();
+			response.put("service", serviceName);
+			response.put("action", message.getAction());
+			response.put("error", "node name not specified");
+			message.reply(response);
+			return;
+		}
+		
+		JsonObject deleteNodeMsg = new JsonObject()
+			.put("action", "del_node")
+			.put("params", params);
+
+		eb.send("nms.storage", deleteNodeMsg, reply1 -> {
+			if (reply1.succeeded()) {
+				JsonObject response1 = (JsonObject)reply1.result().body();
+				response1.put("service", serviceName);
+				response1.put("action", message.getAction());
+				if (response1.containsKey("content")) {
+					Long d = response1.getJsonObject("content").getLong("deleted_docs");
+					if (d > 0) {
+						JsonObject deleteLinkMsg = new JsonObject()
+							.put("action", "del_links_by_node")
+							.put("params", new JsonObject().put("_id", params.getString("_id")));
+						eb.send("nms.storage", deleteLinkMsg, reply2 -> {
+							if (reply2.succeeded()) {
+								message.reply(response1);
+							} else {
+								JsonObject response2 = new JsonObject();
+								response2.put("service", serviceName);
+								response2.put("action", message.getAction());
+								response2.put("error", reply2.cause());
+								message.reply(response2);
+							}
+						});
+					} else {
+						message.reply(response1);
+					}
+				} else {
+					message.reply(response1);
+				}
+			} else {
+				JsonObject response = new JsonObject();
+				response.put("service", serviceName);
+				response.put("action", message.getAction());
+				response.put("error", reply1.cause());
+				message.reply(response);
+			}
+		});		
+	}
+	protected void deleteLink(NmsEbMessage message) {
+		JsonObject params = message.getParams();
+		if (params.getString("_id","").isEmpty()) {
+			JsonObject response = new JsonObject();
+			response.put("service", serviceName);
+			response.put("action", message.getAction());
+			response.put("error", "link Id not specified");
+			message.reply(response);
+			return;
+		}
+		
+		JsonObject toStorageMsg = new JsonObject()
+			.put("action", "del_link")
+			.put("params", params);
+
+		eb.send("nms.storage", toStorageMsg, reply -> {
+			if (reply.succeeded()) {
+				JsonObject response = (JsonObject)reply.result().body();
+				response.put("service", serviceName);
+				response.put("action", message.getAction());
+				message.reply(response);
+			} else {
+				JsonObject response = new JsonObject();
+				response.put("service", serviceName);
+				response.put("action", message.getAction());
+				response.put("error", reply.cause());
+				message.reply(response);
+				}
+			});		
+	}
 	protected void getTopology(NmsEbMessage message) {
 		JsonObject toStorageMsg = new JsonObject()
 			.put("action", "get_topology")
 			.put("params", new JsonObject());
 
-			eb.send("nms.storage", toStorageMsg, reply -> {
-				if (reply.succeeded()) {
-					JsonObject response = (JsonObject)reply.result().body();
-					response.put("service", serviceName);
-					response.put("action", message.getAction());
-					message.reply(response);
-				} else {
-					JsonObject response = new JsonObject();
-					response.put("service", serviceName);
-					response.put("action", message.getAction());
-					response.put("error", reply.cause());
-					message.reply(response);
-			    }
-			});
+		eb.send("nms.storage", toStorageMsg, reply -> {
+			if (reply.succeeded()) {
+				JsonObject response = (JsonObject)reply.result().body();
+				response.put("service", serviceName);
+				response.put("action", message.getAction());
+				message.reply(response);
+			} else {
+				JsonObject response = new JsonObject();
+				response.put("service", serviceName);
+				response.put("action", message.getAction());
+				response.put("error", reply.cause());
+				message.reply(response);
+			}
+		});
 	}
 	
 	/*----------------------------------------------*/
