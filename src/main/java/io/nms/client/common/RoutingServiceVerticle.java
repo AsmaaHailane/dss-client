@@ -26,12 +26,6 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 	protected HashMap<String, Capability> knownCaps = new HashMap<String, Capability>();
 	protected Instant lastUpdate = Instant.now();
 	
-	private List<JsonObject> nodes = new ArrayList<JsonObject>();
-	private List<JsonObject> links = new ArrayList<JsonObject>();
-	
-	/* route management data str */
-	// regPrefixes, routes...
-	
 	public void start(Future<Void> fut) {
 		Future<Void> futBase = Future.future(promise -> super.start(promise));
 		futBase.setHandler(res -> {
@@ -90,14 +84,14 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 			case "get_all_reg_pref":
 				getAllRegPref(nmsEbMsg);
 				break;
-			case "get_reg_pref_by_id":
-				getRegPrefById(nmsEbMsg);
+			case "get_reg_pref":
+				getRegPref(nmsEbMsg);
 				break;
 			case "get_all_routes":
 				getAllRoutes(nmsEbMsg);
 				break;
-			case "get_route_by_id":
-				getRouteById(nmsEbMsg);
+			case "get_route":
+				getRoute(nmsEbMsg);
 				break;
 				
 			case "add_reg_pref":
@@ -108,10 +102,10 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 				break;
 				
 			case "del_reg_pref":
-				delRegPref(nmsEbMsg);
+				deleteRegPref(nmsEbMsg);
 				break;
 			case "del_route":
-				delRoute(nmsEbMsg);
+				deleteRoute(nmsEbMsg);
 				break;
 
 			default:
@@ -186,59 +180,258 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 	}
 	
 	protected void getAllRegPref(NmsEbMessage message) {
-		JsonObject response = new JsonObject();
-		response.put("service", serviceName);
-		response.put("content", new JsonObject());
-		message.reply(response);
+		JsonObject toStorageMsg = new JsonObject()
+			.put("action", "get_all_prefixes")
+			.put("params", new JsonObject());
+
+		eb.send("nms.storage", toStorageMsg, reply -> {
+			if (reply.succeeded()) {
+				JsonObject response = (JsonObject)reply.result().body();
+				response.put("service", serviceName);
+				response.put("action", message.getAction());
+				message.reply(response);
+			} else {
+				JsonObject response = new JsonObject();
+				response.put("service", serviceName);
+				response.put("action", message.getAction());
+				response.put("error", reply.cause());
+				message.reply(response);
+			}
+		});
 	}
 	
-	protected void getRegPrefById(NmsEbMessage message) {
-		JsonObject response = new JsonObject();
-		response.put("service", serviceName);
-		response.put("content", new JsonObject());
-		message.reply(response);
+	protected void getRegPref(NmsEbMessage message) {
+		JsonObject params = message.getParams();
+		if (params.getString("_id","").isEmpty()) {
+			JsonObject response = new JsonObject();
+			response.put("service", serviceName);
+			response.put("action", message.getAction());
+			response.put("error", "Prefix Id not specified");
+			message.reply(response);
+			return;
+		}
+		
+		JsonObject toStorageMsg = new JsonObject()
+			.put("action", "get_prefix")
+			.put("params", params);
+
+		eb.send("nms.storage", toStorageMsg, reply -> {
+			if (reply.succeeded()) {
+				JsonObject response = (JsonObject)reply.result().body();
+				response.put("service", serviceName);
+				response.put("action", message.getAction());
+				message.reply(response);
+			} else {
+				JsonObject response = new JsonObject();
+				response.put("service", serviceName);
+				response.put("action", message.getAction());
+				response.put("error", reply.cause());
+				message.reply(response);
+			}
+		});
 	}
 	
 	protected void getAllRoutes(NmsEbMessage message) {
-		JsonObject response = new JsonObject();
-		response.put("service", serviceName);
-		response.put("content", new JsonObject());
-		message.reply(response);
+		JsonObject toStorageMsg = new JsonObject()
+			.put("action", "get_all_routes")
+			.put("params", new JsonObject());
+
+		eb.send("nms.storage", toStorageMsg, reply -> {
+			if (reply.succeeded()) {
+				JsonObject response = (JsonObject)reply.result().body();
+				response.put("service", serviceName);
+				response.put("action", message.getAction());
+				message.reply(response);
+			} else {
+				JsonObject response = new JsonObject();
+				response.put("service", serviceName);
+				response.put("action", message.getAction());
+				response.put("error", reply.cause());
+				message.reply(response);
+			}
+		});
 	}
 	
-	protected void getRouteById(NmsEbMessage message) {
-		JsonObject response = new JsonObject();
-		response.put("service", serviceName);
-		response.put("content", new JsonObject());
-		message.reply(response);
+	protected void getRoute(NmsEbMessage message) {
+		JsonObject params = message.getParams();
+		if (params.getString("_id","").isEmpty()) {
+			JsonObject response = new JsonObject();
+			response.put("service", serviceName);
+			response.put("action", message.getAction());
+			response.put("error", "Route Id not specified");
+			message.reply(response);
+			return;
+		}
+		
+		JsonObject toStorageMsg = new JsonObject()
+			.put("action", "get_route")
+			.put("params", params);
+
+		eb.send("nms.storage", toStorageMsg, reply -> {
+			if (reply.succeeded()) {
+				JsonObject response = (JsonObject)reply.result().body();
+				response.put("service", serviceName);
+				response.put("action", message.getAction());
+				message.reply(response);
+			} else {
+				JsonObject response = new JsonObject();
+				response.put("service", serviceName);
+				response.put("action", message.getAction());
+				response.put("error", reply.cause());
+				message.reply(response);
+			}
+		});
 	}
 	
 	protected void addRegPref(NmsEbMessage message) {
-		JsonObject response = new JsonObject();
-		response.put("service", serviceName);
-		response.put("content", new JsonObject());
-		message.reply(response);
+		/* TODO: check node id existence */
+		JsonObject params = message.getParams();
+		if (params.getString("name","").isEmpty()) {
+			JsonObject response = new JsonObject();
+			response.put("service", serviceName);
+			response.put("action", message.getAction());
+			response.put("error", "Prefix must have a name");
+			message.reply(response);
+			return;
+		}
+		if (params.getString("node","").isEmpty()) {
+			JsonObject response = new JsonObject();
+			response.put("service", serviceName);
+			response.put("action", message.getAction());
+			response.put("error", "Missing node Id");
+			message.reply(response);
+			return;
+		}
+		params.put("status", "pending");
+		
+		JsonObject toStorageMsg = new JsonObject()
+			.put("action", "add_prefix")
+			.put("params", params);
+
+		eb.send("nms.storage", toStorageMsg, reply -> {
+			if (reply.succeeded()) {
+				JsonObject response = (JsonObject)reply.result().body();
+				response.put("service", serviceName);
+				response.put("action", message.getAction());
+				message.reply(response);
+			} else {
+				JsonObject response = new JsonObject();
+				response.put("service", serviceName);
+				response.put("action", message.getAction());
+				response.put("error", reply.cause());
+				message.reply(response);
+			}
+		});		
 	}
 	
 	protected void addRoute(NmsEbMessage message) {
-		JsonObject response = new JsonObject();
-		response.put("service", serviceName);
-		response.put("content", new JsonObject());
-		message.reply(response);
+		JsonObject params = message.getParams();
+		if (params.getString("prefix","").isEmpty()) {
+			JsonObject response = new JsonObject();
+			response.put("service", serviceName);
+			response.put("action", message.getAction());
+			response.put("error", "Prefix missing");
+			message.reply(response);
+			return;
+		}
+		if (params.getString("fromNode","").isEmpty()) {
+			JsonObject response = new JsonObject();
+			response.put("service", serviceName);
+			response.put("action", message.getAction());
+			response.put("error", "fromNode missing");
+			message.reply(response);
+			return;
+		}
+		if (params.getJsonArray("path", new JsonArray()).isEmpty()) {
+			JsonObject response = new JsonObject();
+			response.put("service", serviceName);
+			response.put("action", message.getAction());
+			response.put("error", "Path cannot be empty");
+			message.reply(response);
+			return;
+		}
+		params.put("status", "pending");
+		
+		JsonObject toStorageMsg = new JsonObject()
+			.put("action", "add_route")
+			.put("params", params);
+
+		eb.send("nms.storage", toStorageMsg, reply -> {
+			if (reply.succeeded()) {
+				JsonObject response = (JsonObject)reply.result().body();
+				response.put("service", serviceName);
+				response.put("action", message.getAction());
+				message.reply(response);
+			} else {
+				JsonObject response = new JsonObject();
+				response.put("service", serviceName);
+				response.put("action", message.getAction());
+				response.put("error", reply.cause());
+				message.reply(response);
+			}
+		});
 	}
 	
-	protected void delRegPref(NmsEbMessage message) {
-		JsonObject response = new JsonObject();
-		response.put("service", serviceName);
-		response.put("content", new JsonObject());
-		message.reply(response);
+	protected void deleteRegPref(NmsEbMessage message) {
+		JsonObject params = message.getParams();
+		if (params.getString("_id","").isEmpty()) {
+			JsonObject response = new JsonObject();
+			response.put("service", serviceName);
+			response.put("action", message.getAction());
+			response.put("error", "Prefix Id not specified");
+			message.reply(response);
+			return;
+		}
+		
+		JsonObject toStorageMsg = new JsonObject()
+			.put("action", "del_prefix")
+			.put("params", params);
+
+		eb.send("nms.storage", toStorageMsg, reply -> {
+			if (reply.succeeded()) {
+				JsonObject response = (JsonObject)reply.result().body();
+				response.put("service", serviceName);
+				response.put("action", message.getAction());
+				message.reply(response);
+			} else {
+				JsonObject response = new JsonObject();
+				response.put("service", serviceName);
+				response.put("action", message.getAction());
+				response.put("error", reply.cause());
+				message.reply(response);
+				}
+		});
 	}
 	
-	protected void delRoute(NmsEbMessage message) {
-		JsonObject response = new JsonObject();
-		response.put("service", serviceName);
-		response.put("content", new JsonObject());
-		message.reply(response);
+	protected void deleteRoute(NmsEbMessage message) {
+		JsonObject params = message.getParams();
+		if (params.getString("_id","").isEmpty()) {
+			JsonObject response = new JsonObject();
+			response.put("service", serviceName);
+			response.put("action", message.getAction());
+			response.put("error", "Route Id not specified");
+			message.reply(response);
+			return;
+		}
+		
+		JsonObject toStorageMsg = new JsonObject()
+			.put("action", "del_route")
+			.put("params", params);
+
+		eb.send("nms.storage", toStorageMsg, reply -> {
+			if (reply.succeeded()) {
+				JsonObject response = (JsonObject)reply.result().body();
+				response.put("service", serviceName);
+				response.put("action", message.getAction());
+				message.reply(response);
+			} else {
+				JsonObject response = new JsonObject();
+				response.put("service", serviceName);
+				response.put("action", message.getAction());
+				response.put("error", reply.cause());
+				message.reply(response);
+				}
+		});
 	}
 	/*----------------------------------------------*/
 	
