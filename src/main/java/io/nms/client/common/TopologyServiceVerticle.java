@@ -11,6 +11,7 @@ import io.nms.messages.Receipt;
 import io.nms.messages.Result;
 import io.nms.messages.Specification;
 import io.nms.storage.NmsEbMessage;
+import io.vertx.core.CompositeFuture;
 import io.vertx.core.Future;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
@@ -498,46 +499,70 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 			return;
 		}
 		
-		JsonObject deleteNodeMsg = new JsonObject()
-			.put("action", "del_node")
-			.put("params", params);
-
-		eb.send("nms.storage", deleteNodeMsg, reply1 -> {
-			if (reply1.succeeded()) {
-				JsonObject response1 = (JsonObject)reply1.result().body();
-				response1.put("service", serviceName);
-				response1.put("action", message.getAction());
-				if (response1.containsKey("content")) {
-					Long d = response1.getJsonObject("content").getLong("deleted_docs");
-					if (d > 0) {
-						JsonObject deleteLinkMsg = new JsonObject()
-							.put("action", "del_links_by_node")
-							.put("params", new JsonObject().put("_id", params.getString("_id")));
-						eb.send("nms.storage", deleteLinkMsg, reply2 -> {
-							if (reply2.succeeded()) {
-								message.reply(response1);
-							} else {
-								JsonObject response2 = new JsonObject();
-								response2.put("service", serviceName);
-								response2.put("action", message.getAction());
-								response2.put("error", reply2.cause());
-								message.reply(response2);
-							}
-						});
-					} else {
-						message.reply(response1);
-					}
+		// delete links related to the node
+		Future<Void> delLinksFut = Future.future();
+		JsonObject delLinksMsg = new JsonObject()
+				.put("action", "del_links_by_node")
+				.put("params", new JsonObject().put("_id", params.getString("_id")));
+		eb.send("nms.storage", delLinksMsg, rep -> {
+			if (rep.succeeded()) {
+				JsonObject delLinksResp = (JsonObject)rep.result().body();
+				if (delLinksResp.containsKey("content")) {
+					delLinksFut.complete();
 				} else {
-					message.reply(response1);
+					delLinksFut.fail(delLinksResp.getString("error"));
 				}
 			} else {
+				delLinksFut.fail(rep.cause());
+			}
+		});
+		// delete prefixes related to the node
+		Future<Void> delPrefsFut = Future.future();
+		JsonObject delPrefsMsg = new JsonObject()
+				.put("action", "del_reg_pref_by_node")
+				.put("params", new JsonObject().put("_id", params.getString("_id")));
+		eb.send("nms.routing", delPrefsMsg, rep -> {
+			if (rep.succeeded()) {
+				JsonObject delPrefsResp = (JsonObject)rep.result().body();
+				if (delPrefsResp.containsKey("content")) {
+					delPrefsFut.complete();
+				} else {
+					delPrefsFut.fail(delPrefsResp.getString("error"));
+				}
+			} else {
+				delPrefsFut.fail(rep.cause());
+			}
+		});
+		
+		CompositeFuture.all(delLinksFut, delPrefsFut).setHandler(ar -> {
+			if (ar.failed()) {
 				JsonObject response = new JsonObject();
 				response.put("service", serviceName);
 				response.put("action", message.getAction());
-				response.put("error", reply1.cause());
+				response.put("error", ar.cause());
 				message.reply(response);
+			} else {
+				// delete the node
+				JsonObject delNodeMsg = new JsonObject()
+						.put("action", "del_node")
+						.put("params", params);
+
+				eb.send("nms.storage", delNodeMsg, rep -> {
+					if (rep.succeeded()) {
+						JsonObject response = (JsonObject)rep.result().body();
+						response.put("service", serviceName);
+						response.put("action", message.getAction());
+						message.reply(response);
+					} else {
+						JsonObject response = new JsonObject();
+						response.put("service", serviceName);
+						response.put("action", message.getAction());
+						response.put("error", rep.cause());
+						message.reply(response);
+					}
+				});
 			}
-		});		
+		});
 	}
 	protected void deleteLink(NmsEbMessage message) {
 		JsonObject params = message.getParams();

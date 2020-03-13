@@ -104,6 +104,9 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 			case "del_reg_pref":
 				deleteRegPref(nmsEbMsg);
 				break;
+			case "del_reg_pref_by_node":
+				deleteRegPrefByNode(nmsEbMsg);
+				break;
 			case "del_route":
 				deleteRoute(nmsEbMsg);
 				break;
@@ -415,6 +418,37 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 		
 		JsonObject toStorageMsg = new JsonObject()
 			.put("action", "del_prefix")
+			.put("params", params);
+
+		eb.send("nms.storage", toStorageMsg, reply -> {
+			if (reply.succeeded()) {
+				JsonObject response = (JsonObject)reply.result().body();
+				response.put("service", serviceName);
+				response.put("action", message.getAction());
+				message.reply(response);
+			} else {
+				JsonObject response = new JsonObject();
+				response.put("service", serviceName);
+				response.put("action", message.getAction());
+				response.put("error", reply.cause());
+				message.reply(response);
+				}
+		});
+	}
+	
+	protected void deleteRegPrefByNode(NmsEbMessage message) {
+		JsonObject params = message.getParams();
+		if (params.getString("_id","").isEmpty()) {
+			JsonObject response = new JsonObject();
+			response.put("service", serviceName);
+			response.put("action", message.getAction());
+			response.put("error", "Node Id not specified");
+			message.reply(response);
+			return;
+		}
+		
+		JsonObject toStorageMsg = new JsonObject()
+			.put("action", "del_prefix_by_node")
 			.put("params", params);
 
 		eb.send("nms.storage", toStorageMsg, reply -> {
