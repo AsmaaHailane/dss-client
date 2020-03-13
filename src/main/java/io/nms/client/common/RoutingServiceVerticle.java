@@ -284,13 +284,12 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 	}
 	
 	protected void addRegPref(NmsEbMessage message) {
-		/* TODO: check node id existence */
 		JsonObject params = message.getParams();
 		if (params.getString("name","").isEmpty()) {
 			JsonObject response = new JsonObject();
 			response.put("service", serviceName);
 			response.put("action", message.getAction());
-			response.put("error", "Prefix must have a name");
+			response.put("error", "prefix must have a name");
 			message.reply(response);
 			return;
 		}
@@ -302,26 +301,57 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 			message.reply(response);
 			return;
 		}
-		params.put("status", "pending");
 		
-		JsonObject toStorageMsg = new JsonObject()
-			.put("action", "add_prefix")
-			.put("params", params);
+		JsonObject checkNodeMsg = new JsonObject()
+				.put("action", "get_node")
+				.put("params", new JsonObject().put("_id", params.getString("node")));
 
-		eb.send("nms.storage", toStorageMsg, reply -> {
-			if (reply.succeeded()) {
-				JsonObject response = (JsonObject)reply.result().body();
-				response.put("service", serviceName);
-				response.put("action", message.getAction());
-				message.reply(response);
+		eb.send("nms.storage", checkNodeMsg, reply1 -> {
+			if (reply1.succeeded()) {
+				JsonObject nodeResp = (JsonObject)reply1.result().body();
+				if (nodeResp.containsKey("content")) {
+					if (!nodeResp.getJsonObject("content").isEmpty()) {
+						params.put("status", "pending");
+						
+						JsonObject addPrefMsg = new JsonObject()
+								.put("action", "add_prefix")
+								.put("params", params);
+
+						eb.send("nms.storage", addPrefMsg, reply -> {
+							if (reply.succeeded()) {
+								JsonObject response = (JsonObject)reply.result().body();
+								response.put("service", serviceName);
+								response.put("action", message.getAction());
+								message.reply(response);
+							} else {
+								JsonObject response = new JsonObject();
+								response.put("service", serviceName);
+								response.put("action", message.getAction());
+								response.put("error", reply.cause());
+								message.reply(response);
+							}
+						});		
+					} else {
+						JsonObject response = new JsonObject();
+						response.put("service", serviceName);
+						response.put("action", message.getAction());
+						response.put("error", "specified node does not exist");
+						message.reply(response);
+					}
+				} else {
+					JsonObject response = new JsonObject();
+					response.put("service", serviceName);
+					response.put("action", message.getAction());
+					response.put("error", "failed to check node existence");
+				}
 			} else {
 				JsonObject response = new JsonObject();
 				response.put("service", serviceName);
 				response.put("action", message.getAction());
-				response.put("error", reply.cause());
+				response.put("error", reply1.cause());
 				message.reply(response);
 			}
-		});		
+		});
 	}
 	
 	protected void addRoute(NmsEbMessage message) {
