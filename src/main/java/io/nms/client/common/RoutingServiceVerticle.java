@@ -11,6 +11,7 @@ import io.nms.messages.Receipt;
 import io.nms.messages.Result;
 import io.nms.messages.Specification;
 import io.nms.storage.NmsEbMessage;
+import io.vertx.core.CompositeFuture;
 import io.vertx.core.Future;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
@@ -197,7 +198,7 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 				JsonObject response = new JsonObject();
 				response.put("service", serviceName);
 				response.put("action", message.getAction());
-				response.put("error", reply.cause());
+				response.put("error", reply.cause().getMessage());
 				message.reply(response);
 			}
 		});
@@ -228,7 +229,7 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 				JsonObject response = new JsonObject();
 				response.put("service", serviceName);
 				response.put("action", message.getAction());
-				response.put("error", reply.cause());
+				response.put("error", reply.cause().getMessage());
 				message.reply(response);
 			}
 		});
@@ -249,7 +250,7 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 				JsonObject response = new JsonObject();
 				response.put("service", serviceName);
 				response.put("action", message.getAction());
-				response.put("error", reply.cause());
+				response.put("error", reply.cause().getMessage());
 				message.reply(response);
 			}
 		});
@@ -280,7 +281,7 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 				JsonObject response = new JsonObject();
 				response.put("service", serviceName);
 				response.put("action", message.getAction());
-				response.put("error", reply.cause());
+				response.put("error", reply.cause().getMessage());
 				message.reply(response);
 			}
 		});
@@ -330,7 +331,7 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 								JsonObject response = new JsonObject();
 								response.put("service", serviceName);
 								response.put("action", message.getAction());
-								response.put("error", reply.cause());
+								response.put("error", reply.cause().getMessage());
 								message.reply(response);
 							}
 						});		
@@ -351,7 +352,7 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 				JsonObject response = new JsonObject();
 				response.put("service", serviceName);
 				response.put("action", message.getAction());
-				response.put("error", reply1.cause());
+				response.put("error", reply1.cause().getMessage());
 				message.reply(response);
 			}
 		});
@@ -363,7 +364,7 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 			JsonObject response = new JsonObject();
 			response.put("service", serviceName);
 			response.put("action", message.getAction());
-			response.put("error", "Prefix missing");
+			response.put("error", "Prefix Id missing");
 			message.reply(response);
 			return;
 		}
@@ -383,24 +384,83 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 			message.reply(response);
 			return;
 		}
-		params.put("status", "pending");
 		
-		JsonObject toStorageMsg = new JsonObject()
-			.put("action", "add_route")
-			.put("params", params);
-
-		eb.send("nms.storage", toStorageMsg, reply -> {
-			if (reply.succeeded()) {
-				JsonObject response = (JsonObject)reply.result().body();
-				response.put("service", serviceName);
-				response.put("action", message.getAction());
-				message.reply(response);
+		// check prefix existence
+		Future<Void> getPrefFut = Future.future();
+		JsonObject getPrefMsg = new JsonObject()
+				.put("action", "get_prefix")
+				.put("params", new JsonObject().put("_id", params.getString("prefix")));
+		eb.send("nms.storage", getPrefMsg, rep -> {
+			if (rep.succeeded()) {
+				JsonObject getPrefResp = (JsonObject)rep.result().body();
+				if (getPrefResp.containsKey("content")) {
+					if (!getPrefResp.getJsonObject("content").isEmpty()) {
+						getPrefFut.complete();
+					} else {
+						getPrefFut.fail("prefix does not exist");
+					}
+				} else {
+					getPrefFut.fail(getPrefResp.getString("error"));
+				}
 			} else {
+				getPrefFut.fail(rep.cause());
+			}
+		});
+		
+		// check nodes existence
+		Future<Void> getNodesFut = Future.future();
+		JsonArray nodes = params.getJsonArray("path");
+		nodes.add(params.getString("fromNode"));
+		JsonObject getNodesMsg = new JsonObject()
+				.put("action", "get_nodes")
+				.put("params", new JsonObject().put("nodes", nodes));
+
+		eb.send("nms.storage", getNodesMsg, rep -> {
+			if (rep.succeeded()) {
+				JsonObject getNodesResp = (JsonObject)rep.result().body();
+				if (getNodesResp.containsKey("content")) {
+					int d = getNodesResp.getJsonObject("content").getJsonArray("docs").size();
+					if (d == nodes.size()) {
+						getNodesFut.complete();
+					} else {
+						getNodesFut.fail("one or many specified nodes do not exist");
+					}
+				} else {
+					getNodesFut.fail(getNodesResp.getString("error"));
+				}
+			} else {
+				getNodesFut.fail(rep.cause());
+			}
+		});
+		
+		// add route
+		CompositeFuture.all(getPrefFut, getNodesFut).setHandler(ar -> {
+			if (ar.failed()) {
 				JsonObject response = new JsonObject();
 				response.put("service", serviceName);
 				response.put("action", message.getAction());
-				response.put("error", reply.cause());
+				response.put("error", ar.cause().getMessage());
 				message.reply(response);
+			} else {
+				params.put("status", "pending");
+				JsonObject addRouteMsg = new JsonObject()
+						.put("action", "add_route")
+						.put("params", params);
+
+				eb.send("nms.storage", addRouteMsg, reply -> {
+					if (reply.succeeded()) {
+						JsonObject response = (JsonObject)reply.result().body();
+						response.put("service", serviceName);
+						response.put("action", message.getAction());
+						message.reply(response);
+					} else {
+						JsonObject response = new JsonObject();
+						response.put("service", serviceName);
+						response.put("action", message.getAction());
+						response.put("error", reply.cause().getMessage());
+						message.reply(response);
+					}
+				});
 			}
 		});
 	}
@@ -430,7 +490,7 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 				JsonObject response = new JsonObject();
 				response.put("service", serviceName);
 				response.put("action", message.getAction());
-				response.put("error", reply.cause());
+				response.put("error", reply.cause().getMessage());
 				message.reply(response);
 				}
 		});
@@ -461,7 +521,7 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 				JsonObject response = new JsonObject();
 				response.put("service", serviceName);
 				response.put("action", message.getAction());
-				response.put("error", reply.cause());
+				response.put("error", reply.cause().getMessage());
 				message.reply(response);
 				}
 		});
@@ -492,7 +552,7 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 				JsonObject response = new JsonObject();
 				response.put("service", serviceName);
 				response.put("action", message.getAction());
-				response.put("error", reply.cause());
+				response.put("error", reply.cause().getMessage());
 				message.reply(response);
 				}
 		});
