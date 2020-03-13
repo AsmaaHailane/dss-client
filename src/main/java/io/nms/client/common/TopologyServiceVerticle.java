@@ -280,6 +280,7 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 		message.reply(response);	      
 	}
 	
+	/* TODO: publish message info for relevant changes... */
 	protected void addNode(NmsEbMessage message) {
 		JsonObject params = message.getParams();
 		if (params.getString("name","").isEmpty()) {
@@ -516,25 +517,8 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 				delLinksFut.fail(rep.cause());
 			}
 		});
-		// delete prefixes related to the node
-		Future<Void> delPrefsFut = Future.future();
-		JsonObject delPrefsMsg = new JsonObject()
-				.put("action", "del_reg_pref_by_node")
-				.put("params", new JsonObject().put("_id", params.getString("_id")));
-		eb.send("nms.routing", delPrefsMsg, rep -> {
-			if (rep.succeeded()) {
-				JsonObject delPrefsResp = (JsonObject)rep.result().body();
-				if (delPrefsResp.containsKey("content")) {
-					delPrefsFut.complete();
-				} else {
-					delPrefsFut.fail(delPrefsResp.getString("error"));
-				}
-			} else {
-				delPrefsFut.fail(rep.cause());
-			}
-		});
-		
-		CompositeFuture.all(delLinksFut, delPrefsFut).setHandler(ar -> {
+
+		delLinksFut.setHandler(ar -> {
 			if (ar.failed()) {
 				JsonObject response = new JsonObject();
 				response.put("service", serviceName);
