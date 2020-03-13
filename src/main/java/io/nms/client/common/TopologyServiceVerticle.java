@@ -318,7 +318,7 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 				JsonObject response = new JsonObject();
 				response.put("service", serviceName);
 				response.put("action", message.getAction());
-				response.put("error", reply.cause());
+				response.put("error", reply.cause().getMessage());
 				message.reply(response);
 			}
 		});
@@ -348,7 +348,7 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 				JsonObject response = new JsonObject();
 				response.put("service", serviceName);
 				response.put("action", message.getAction());
-				response.put("error", reply.cause());
+				response.put("error", reply.cause().getMessage());
 				message.reply(response);
 			}
 		});
@@ -393,7 +393,7 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 								JsonObject response = new JsonObject();
 								response.put("service", serviceName);
 								response.put("action", message.getAction());
-								response.put("error", reply.cause());
+								response.put("error", reply.cause().getMessage());
 								message.reply(response);
 							}
 						});		
@@ -414,7 +414,7 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 				JsonObject response = new JsonObject();
 				response.put("service", serviceName);
 				response.put("action", message.getAction());
-				response.put("error", reply1.cause());
+				response.put("error", reply1.cause().getMessage());
 				message.reply(response);
 			}
 		});
@@ -444,7 +444,7 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 				JsonObject response = new JsonObject();
 				response.put("service", serviceName);
 				response.put("action", message.getAction());
-				response.put("error", reply.cause());
+				response.put("error", reply.cause().getMessage());
 				message.reply(response);
 			}
 		});		
@@ -464,7 +464,7 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 				JsonObject response = new JsonObject();
 				response.put("service", serviceName);
 				response.put("action", message.getAction());
-				response.put("error", reply.cause());
+				response.put("error", reply.cause().getMessage());
 				message.reply(response);
 			}
 		});
@@ -484,7 +484,7 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 				JsonObject response = new JsonObject();
 				response.put("service", serviceName);
 				response.put("action", message.getAction());
-				response.put("error", reply.cause());
+				response.put("error", reply.cause().getMessage());
 				message.reply(response);
 			}
 		});		
@@ -523,7 +523,7 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 				JsonObject response = new JsonObject();
 				response.put("service", serviceName);
 				response.put("action", message.getAction());
-				response.put("error", ar.cause());
+				response.put("error", ar.cause().getMessage());
 				message.reply(response);
 			} else {
 				// delete the node
@@ -541,7 +541,7 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 						JsonObject response = new JsonObject();
 						response.put("service", serviceName);
 						response.put("action", message.getAction());
-						response.put("error", rep.cause());
+						response.put("error", rep.cause().getMessage());
 						message.reply(response);
 					}
 				});
@@ -573,7 +573,7 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 				JsonObject response = new JsonObject();
 				response.put("service", serviceName);
 				response.put("action", message.getAction());
-				response.put("error", reply.cause());
+				response.put("error", reply.cause().getMessage());
 				message.reply(response);
 				}
 			});		
@@ -593,7 +593,7 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 				JsonObject response = new JsonObject();
 				response.put("service", serviceName);
 				response.put("action", message.getAction());
-				response.put("error", reply.cause());
+				response.put("error", reply.cause().getMessage());
 				message.reply(response);
 			}
 		});
