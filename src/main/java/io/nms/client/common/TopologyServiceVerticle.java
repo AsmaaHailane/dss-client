@@ -179,96 +179,6 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 		}
 	}
 	
-	/*private void updateTopologyGraph(Result res, Future<Void> future) {
-		// get node name and type
-		String[] nodeId = res.getAgentId().split("-");
-		String nodeName = nodeId[0];
-		String nodeType = "N/A";
-		if (nodeId.length > 1) {
-			nodeType = nodeId[1];
-		}
-		
-		// add source node if does not exist
-		// with status = active
-		JsonObject snode = new JsonObject()
-			.put("name", nodeName)
-			.put("type", nodeType)
-			.put("status", "ACTIVE");
-		upsertNode(snode);
-		
-		int tg = res.getResults().indexOf("target");
-		int st = res.getResults().indexOf("status");
-		
-		// add links
-		for (List<String> r : res.getResultValues()) {
-			String tname = r.get(tg);
-			String lstatus = r.get(st);
-
-			// add target node if does not exist
-			// with status = active
-			JsonObject tnode = new JsonObject()
-				.put("name", tname)
-				.put("type", "N/A")
-				.put("status", "INACTIVE");
-			upsertNode(tnode);
-			
-			JsonObject link = new JsonObject()
-				.put("sname", nodeName)
-				.put("tname", tname)
-				.put("status", lstatus);
-			upsertLink(link);
-		}
-		future.complete();
-	}*/
-	
-	/*private void upsertLink(JsonObject link) {
-		String newSname = link.getString("sname");
-		String newTname = link.getString("tname");
-		int linkFound = -1;
-		int i = 0;
-		for (JsonObject l : links) {
-			String sname = l.getString("sname");
-			String tname = l.getString("tname");
-			if((sname.equals(newSname) && tname.equals(newTname))||(sname.equals(newTname)&&tname.equals(newSname))) {
-				linkFound = i;
-				break;
-			}
-			i++;
-		}
-		if (linkFound >= 0) {
-			links.set(linkFound, link);
-		} else {
-			links.add(link);
-		}
-	}
-	
-	private void upsertNode(JsonObject node) {
-		int nodeFound = -1;
-		int i = 0;
-		for (JsonObject n : nodes) {
-			if(n.getString("name").equals(node.getString("name"))) {
-				nodeFound = i;
-				break;
-			}
-			i++;
-		}
-		if (nodeFound >= 0) {
-			if (nodes.get(nodeFound).getString("status").equals("INACTIVE")) {
-				nodes.set(nodeFound, node);
-			}
-		} else {
-			nodes.add(node);
-		}
-	}
-	
-	private void resetTopology() {
-		for (JsonObject n : nodes) {
-			n.put("status", "INACTIVE");
-		}
-		for (JsonObject l : links) {
-			l.put("status", "DOWN");
-		}
-	}*/
 	/*------------------------------------------------*/
 	
 	/*--------------- API functions ----------------*/
@@ -295,7 +205,7 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 			JsonObject response = new JsonObject();
 			response.put("service", serviceName);
 			response.put("action", message.getAction());
-			response.put("error", "node must have at least on interface");
+			response.put("error", "node must have at least one interface");
 			message.reply(response);
 			return;
 		}
@@ -314,6 +224,7 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 				response.put("service", serviceName);
 				response.put("action", message.getAction());
 				message.reply(response);
+				publishUpdatedTopology();
 			} else {
 				JsonObject response = new JsonObject();
 				response.put("service", serviceName);
@@ -389,6 +300,7 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 								response.put("service", serviceName);
 								response.put("action", message.getAction());
 								message.reply(response);
+								publishUpdatedTopology();
 							} else {
 								JsonObject response = new JsonObject();
 								response.put("service", serviceName);
@@ -495,7 +407,7 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 			JsonObject response = new JsonObject();
 			response.put("service", serviceName);
 			response.put("action", message.getAction());
-			response.put("error", "node name not specified");
+			response.put("error", "node id not specified");
 			message.reply(response);
 			return;
 		}
@@ -537,6 +449,7 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 						response.put("service", serviceName);
 						response.put("action", message.getAction());
 						message.reply(response);
+						publishUpdatedTopology();
 					} else {
 						JsonObject response = new JsonObject();
 						response.put("service", serviceName);
@@ -554,7 +467,7 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 			JsonObject response = new JsonObject();
 			response.put("service", serviceName);
 			response.put("action", message.getAction());
-			response.put("error", "link Id not specified");
+			response.put("error", "link id not specified");
 			message.reply(response);
 			return;
 		}
@@ -569,6 +482,7 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 				response.put("service", serviceName);
 				response.put("action", message.getAction());
 				message.reply(response);
+				publishUpdatedTopology();
 			} else {
 				JsonObject response = new JsonObject();
 				response.put("service", serviceName);
@@ -597,9 +511,31 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 				message.reply(response);
 			}
 		});
-	}
+	}		
 	
 	/*----------------------------------------------*/
+	
+	private void publishUpdatedTopology() {
+		JsonObject toStorageMsg = new JsonObject()
+				.put("action", "get_topology")
+				.put("params", new JsonObject());
+
+		eb.send("nms.storage", toStorageMsg, reply -> {
+			if (reply.succeeded()) {
+				JsonObject response = (JsonObject)reply.result().body();				
+				if (response.containsKey("content")) {
+					JsonObject ebPubMsg = new JsonObject()
+							.put("service", serviceName)
+							.put("content", response.getJsonObject("content"));
+					eb.publish("nms.info.topology", ebPubMsg);					
+				} else {
+					LOG.error("Cannot get updated topology", response.getString("error"));
+				}
+			} else {
+				LOG.error("Cannot get updated topology", reply.cause().getMessage());
+			}
+		});
+	}
 	
 	@Override
 	public void stop(Future stopFuture) throws Exception {
