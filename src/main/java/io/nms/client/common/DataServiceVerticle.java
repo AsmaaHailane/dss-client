@@ -14,10 +14,9 @@ import io.vertx.core.json.JsonObject;
 
 public class DataServiceVerticle extends AmqpVerticle {
 	
-	protected String serviceName = "nms.dss";
-	
-	public void start(Future<Void> fut) {
+	public void start(Future<Void> fut) {	
 		super.start(fut);
+		serviceName = "nms.dss";
 	}
 	
 	@Override

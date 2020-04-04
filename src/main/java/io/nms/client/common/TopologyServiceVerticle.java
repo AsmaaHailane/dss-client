@@ -21,21 +21,21 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 	private static final int RESET_PERIOD_S = 60;
 	private static final int SPEC_PERIOD_MS = 5000;
 	
-	protected String serviceName = "nms.topology";
 	protected HashMap<String, Capability> knownCaps = new HashMap<String, Capability>();
 	protected Instant lastUpdate = Instant.now();
 	
-	protected List<JsonObject> nodes = new ArrayList<JsonObject>();
-	protected List<JsonObject> links = new ArrayList<JsonObject>();
+	//protected List<JsonObject> nodes = new ArrayList<JsonObject>();
+	//protected List<JsonObject> links = new ArrayList<JsonObject>();
 	
 	public void start(Future<Void> fut) {
+		serviceName = "nms.topology";
 		Future<Void> futBase = Future.future(promise -> super.start(promise));
 		futBase.setHandler(res -> {
 			if (res.failed()) {
 				fut.fail(res.cause());
 			} else {
 				// update topo every 60s
-				vertx.setPeriodic(TOPO_UPDATE_PERIOD_MS, id -> {
+				/*vertx.setPeriodic(TOPO_UPDATE_PERIOD_MS, id -> {
 					LOG.info("Check for new topology capabilities");
 					// reset known capabilities every 10mn
 					if (lastUpdate.plusSeconds(RESET_PERIOD_S).isBefore(Instant.now())) {
@@ -56,7 +56,7 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 							}
 						}
 					});
-				});
+				});*/
 				fut.complete();
 			}
 		});
@@ -113,7 +113,7 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 		// check if result expected
 		if (activeSpecs.containsKey(resultMsg.getSchema())) {
 			Result result = new Result(resultMsg);
-			Future<Void> fut = Future.future(promise -> updateTopologyGraph(result, promise));
+			/*Future<Void> fut = Future.future(promise -> updateTopologyGraph(result, promise));
 			fut.setHandler(res -> {
 				if (res.succeeded()) {
 					JsonObject currentTopology = new JsonObject()
@@ -125,7 +125,7 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 					LOG.info("publish topology: "+ebPubMsg.encodePrettily());
 					eb.publish("nms.info.topology", ebPubMsg);
 				}
-			});
+			});*/
 		}
 	}
 	
@@ -179,7 +179,7 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 		}
 	}
 	
-	private void updateTopologyGraph(Result res, Future<Void> future) {
+	/*private void updateTopologyGraph(Result res, Future<Void> future) {
 		// get node name and type
 		String[] nodeId = res.getAgentId().split("-");
 		String nodeName = nodeId[0];
@@ -219,9 +219,9 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 			upsertLink(link);
 		}
 		future.complete();
-	}
+	}*/
 	
-	private void upsertLink(JsonObject link) {
+	/*private void upsertLink(JsonObject link) {
 		String newSname = link.getString("sname");
 		String newTname = link.getString("tname");
 		int linkFound = -1;
@@ -268,7 +268,7 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 		for (JsonObject l : links) {
 			l.put("status", "DOWN");
 		}
-	}
+	}*/
 	/*------------------------------------------------*/
 	
 	/*--------------- API functions ----------------*/

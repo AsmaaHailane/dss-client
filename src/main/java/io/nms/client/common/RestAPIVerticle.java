@@ -42,19 +42,19 @@ public class RestAPIVerticle extends AbstractVerticle {
 				.addOutboundPermitted(new PermittedOptions().setAddressRegex(ADDRESS));
 		sockJSHandler.bridge(bridgeOptions);
 
-		Set<String> allowedHeaders = new HashSet<>();
+		/*Set<String> allowedHeaders = new HashSet<>();
 		allowedHeaders.add("x-requested-with");
 		allowedHeaders.add("Access-Control-Allow-Origin");
-		allowedHeaders.add("origin");
+		allowedHeaders.add("Origin");
 		allowedHeaders.add("Content-Type");
-		allowedHeaders.add("accept");
+		allowedHeaders.add("Accept");
 		allowedHeaders.add("X-PINGARUNER");
 
-		CorsHandler corsHandler = CorsHandler.create("http://10.11.200.213:8080").allowedHeaders(allowedHeaders)
+		CorsHandler corsHandler = CorsHandler.create("http://192.168.1.166:8080").allowedHeaders(allowedHeaders)
 				.allowCredentials(true);
 		
 		Arrays.asList(HttpMethod.values()).stream().forEach(method -> corsHandler.allowedMethod(method));
-		router.route().handler(corsHandler);
+		router.route().handler(corsHandler);*/
 		
 		// handle eventubs messages
 		router.route("/eventbus/*").handler(sockJSHandler);

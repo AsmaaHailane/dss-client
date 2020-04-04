@@ -22,12 +22,11 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 	private static final int RESET_PERIOD_S = 60;
 	private static final int SPEC_PERIOD_MS = 5000;
 	
-	protected String serviceName = "nms.routing";
-	
 	protected HashMap<String, Capability> knownCaps = new HashMap<String, Capability>();
 	protected Instant lastUpdate = Instant.now();
 	
 	public void start(Future<Void> fut) {
+		serviceName = "nms.routing";
 		Future<Void> futBase = Future.future(promise -> super.start(promise));
 		futBase.setHandler(res -> {
 			if (res.failed()) {
@@ -35,7 +34,7 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 			} else {
 				setTopologyListener();
 				// update topo every 60s
-				vertx.setPeriodic(TOPO_UPDATE_PERIOD_MS, id -> {
+				/*vertx.setPeriodic(TOPO_UPDATE_PERIOD_MS, id -> {
 					LOG.info("Check for new routing capabilities");
 					if (lastUpdate.plusSeconds(RESET_PERIOD_S).isBefore(Instant.now())) {
 						LOG.info("Reset discovered capabilities");
@@ -53,7 +52,7 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 							}
 						}
 					});
-				});
+				});*/
 				fut.complete();
 			}
 		});
