@@ -326,6 +326,7 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 								response.put("service", serviceName);
 								response.put("action", message.getAction());
 								message.reply(response);
+								publishUpdatedPrefixes();
 							} else {
 								JsonObject response = new JsonObject();
 								response.put("service", serviceName);
@@ -409,7 +410,7 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 		// check nodes existence
 		Future<Void> getNodesFut = Future.future();
 		JsonArray nodes = params.getJsonArray("path");
-		nodes.add(params.getString("fromNode"));
+		//nodes.add(params.getString("fromNode"));
 		JsonObject getNodesMsg = new JsonObject()
 				.put("action", "get_nodes")
 				.put("params", new JsonObject().put("nodes", nodes));
@@ -452,6 +453,7 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 						response.put("service", serviceName);
 						response.put("action", message.getAction());
 						message.reply(response);
+						publishUpdatedRoutes();
 					} else {
 						JsonObject response = new JsonObject();
 						response.put("service", serviceName);
@@ -485,6 +487,7 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 				response.put("service", serviceName);
 				response.put("action", message.getAction());
 				message.reply(response);
+				publishUpdatedPrefixes();
 			} else {
 				JsonObject response = new JsonObject();
 				response.put("service", serviceName);
@@ -547,6 +550,7 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 				response.put("service", serviceName);
 				response.put("action", message.getAction());
 				message.reply(response);
+				publishUpdatedRoutes();
 			} else {
 				JsonObject response = new JsonObject();
 				response.put("service", serviceName);
@@ -554,6 +558,50 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 				response.put("error", reply.cause().getMessage());
 				message.reply(response);
 				}
+		});
+	}
+	
+	private void publishUpdatedPrefixes() {
+		JsonObject toStorageMsg = new JsonObject()
+				.put("action", "get_all_prefixes")
+				.put("params", new JsonObject());
+
+		eb.send("nms.storage", toStorageMsg, reply -> {
+			if (reply.succeeded()) {
+				JsonObject response = (JsonObject)reply.result().body();				
+				if (response.containsKey("content")) {
+					JsonObject ebPubMsg = new JsonObject()
+							.put("service", serviceName)
+							.put("content", response.getJsonObject("content"));
+					eb.publish("nms.info.routing.prefixes", ebPubMsg);					
+				} else {
+					LOG.error("Cannot get updated prefixes", response.getString("error"));
+				}
+			} else {
+				LOG.error("Cannot get updated prefixes", reply.cause().getMessage());
+			}
+		});
+	}
+	
+	private void publishUpdatedRoutes() {
+		JsonObject toStorageMsg = new JsonObject()
+				.put("action", "get_all_routes")
+				.put("params", new JsonObject());
+
+		eb.send("nms.storage", toStorageMsg, reply -> {
+			if (reply.succeeded()) {
+				JsonObject response = (JsonObject)reply.result().body();				
+				if (response.containsKey("content")) {
+					JsonObject ebPubMsg = new JsonObject()
+							.put("service", serviceName)
+							.put("content", response.getJsonObject("content"));
+					eb.publish("nms.info.routing.routes", ebPubMsg);					
+				} else {
+					LOG.error("Cannot get updated routes", response.getString("error"));
+				}
+			} else {
+				LOG.error("Cannot get updated routes", reply.cause().getMessage());
+			}
 		});
 	}
 	/*----------------------------------------------*/
