@@ -1,6 +1,0 @@
-io/nms/client/main/Main.class
-io/nms/client/common/BaseClientVerticle.class
-io/nms/client/common/AmqpVerticle.class
-io/nms/client/cli/Console.class
-io/nms/client/common/AmqpClientVerticle.class
-io/nms/client/cli/ResultListener.class

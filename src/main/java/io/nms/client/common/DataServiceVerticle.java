@@ -1,6 +1,8 @@
 package io.nms.client.common;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import io.nms.messages.Capability;
 import io.nms.messages.Interrupt;
@@ -20,7 +22,7 @@ public class DataServiceVerticle extends AmqpVerticle {
 	}
 	
 	@Override
-	protected void setServiceApi() {
+	protected void setServiceApi() { 
 		eb.consumer(serviceName, message -> {
 			NmsEbMessage nmsEbMsg = new NmsEbMessage(message);
 			LOG.info("[" + serviceName + "] got query: " 
@@ -34,7 +36,10 @@ public class DataServiceVerticle extends AmqpVerticle {
 				break;	
 			case "get_capabilities":
 				getCapabilities(nmsEbMsg);
-				break;		
+				break;
+			case "get_receipts":
+				getReceipts(nmsEbMsg);
+				break;
 			case "send_specification":
 				sendSpecification(nmsEbMsg);
 				break;
@@ -45,6 +50,7 @@ public class DataServiceVerticle extends AmqpVerticle {
 			default:
 				unsupportedAction(nmsEbMsg);
 			}
+			msgNbr++;
 		});
 	}
 	
@@ -60,11 +66,13 @@ public class DataServiceVerticle extends AmqpVerticle {
 				.put("service", serviceName)
 				.put("content", new JsonObject(resStr));
 			eb.publish("nms.info.dss", ebPubMsg);
+			msgNbr++;
 		
 			// send to storage
 			JsonObject message = new JsonObject()
 				.put("action", "add_result")
 				.put("params", new JsonObject(resStr));
+			msgNbr++;
 			eb.send("nms.storage", message, reply -> {
 				if (reply.succeeded()) {
 					JsonObject opResult = (JsonObject)reply.result().body();
@@ -88,7 +96,7 @@ public class DataServiceVerticle extends AmqpVerticle {
 		Future<List<Capability>> fut = Future.future(promise -> discoverCapabilities(promise));
 		fut.setHandler(res -> {
 	        if (res.succeeded()) {
-	        	String caps = io.nms.messages.Message.toStringFromList(res.result());
+	        	String caps = io.nms.messages.Capability.toStringFromList(res.result());
 	        	JsonObject content = new JsonObject().put("docs", new JsonArray(caps));
 	        	response.put("content", content);
 	        	message.reply(response);
@@ -98,6 +106,19 @@ public class DataServiceVerticle extends AmqpVerticle {
 	        	message.reply(response);
 	        }
 		});
+	}
+	protected void getReceipts(NmsEbMessage message) {
+		JsonObject response = new JsonObject();
+		response.put("service", serviceName);
+		response.put("action", message.getAction());
+		
+		// JsonObject params = message.getParams();
+		
+		List<Receipt> receipts = activeSpecs.values().stream().collect(Collectors.toList());	
+		String r = io.nms.messages.Receipt.toStringFromRctList(receipts);
+	    JsonObject content = new JsonObject().put("docs", new JsonArray(r));
+	    response.put("content", content);
+	    message.reply(response);	    
 	}
 	protected void sendSpecification(NmsEbMessage message) {
 		JsonObject response = new JsonObject();

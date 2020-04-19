@@ -91,7 +91,7 @@ public abstract class AmqpVerticle extends BaseClientVerticle {
 					//if (ebRep.containsKey("error")) {
 					//	promise.fail(ebRep.getString("error"));
 					//} else {
-						promise.complete(Message.toListfromString(msg.bodyAsString()));
+						promise.complete(Capability.toListfromString(msg.bodyAsString()));
 					//}
 				});
 				connection.createSender("/client/capabilities", sender -> {

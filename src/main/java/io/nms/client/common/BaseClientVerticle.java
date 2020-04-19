@@ -24,7 +24,10 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 	protected String clientName = "";
 	protected String clientRole = "";
 	
-	protected HashMap<String, Receipt> activeSpecs = new HashMap<String, Receipt>();
+	protected int msgNbr = 0;
+	protected String status = "running";
+	
+	protected HashMap<String, Receipt> activeSpecs = new HashMap<String, Receipt>();	
 	
 	EventBus eb = null;
 	
@@ -68,10 +71,13 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 	protected void getServiceInfo(NmsEbMessage message) {
 		JsonObject response = new JsonObject();
 		response.put("service", serviceName);
+		response.put("action", message.getAction());
 		
 		JsonObject content = new JsonObject()
 			.put("name", clientName)
-	        .put("role", clientRole);
+	        .put("role", clientRole)
+			.put("status", status)
+			.put("messages", msgNbr);
 		response.put("content", content);
 		message.reply(response);	      
 	}

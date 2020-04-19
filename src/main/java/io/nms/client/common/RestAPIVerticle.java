@@ -4,6 +4,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 
+import io.nms.storage.NmsEbMessage;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
 import io.vertx.core.eventbus.EventBus;
@@ -27,7 +28,9 @@ public class RestAPIVerticle extends AbstractVerticle {
 	private HttpServer hs = null;
 	private int port = 9090;
 	private static final String ADDRESS = "nms.*";
-	private final String serviceName = "nms_rest";
+	private final String serviceName = "nms.rest";
+	
+	private int msgNbr = 0;
 	
 	@Override
 	public void start(Future<Void> fut) {
@@ -42,7 +45,7 @@ public class RestAPIVerticle extends AbstractVerticle {
 				.addOutboundPermitted(new PermittedOptions().setAddressRegex(ADDRESS));
 		sockJSHandler.bridge(bridgeOptions);
 
-		/*Set<String> allowedHeaders = new HashSet<>();
+		Set<String> allowedHeaders = new HashSet<>();
 		allowedHeaders.add("x-requested-with");
 		allowedHeaders.add("Access-Control-Allow-Origin");
 		allowedHeaders.add("Origin");
@@ -50,11 +53,11 @@ public class RestAPIVerticle extends AbstractVerticle {
 		allowedHeaders.add("Accept");
 		allowedHeaders.add("X-PINGARUNER");
 
-		CorsHandler corsHandler = CorsHandler.create("http://192.168.1.166:8080").allowedHeaders(allowedHeaders)
+		CorsHandler corsHandler = CorsHandler.create("http://localhost:8080").allowedHeaders(allowedHeaders)
 				.allowCredentials(true);
 		
 		Arrays.asList(HttpMethod.values()).stream().forEach(method -> corsHandler.allowedMethod(method));
-		router.route().handler(corsHandler);*/
+		router.route().handler(corsHandler);
 		
 		// handle eventubs messages
 		router.route("/eventbus/*").handler(sockJSHandler);
@@ -71,9 +74,51 @@ public class RestAPIVerticle extends AbstractVerticle {
 					fut.fail(res.cause());
 				} else {
 					LOG.info("REST API service listening on port: " + port);
-					fut.complete();
+					initEbServiceInfo(fut);
 				}
 			});
+	}
+	
+	private void initEbServiceInfo(Future<Void> fut) {		
+		eb.consumer(serviceName, message -> { 
+			NmsEbMessage nmsEbMsg = new NmsEbMessage(message);
+			LOG.info("[" + serviceName + "] got query: " 
+					+ nmsEbMsg.getAction() + " | "
+					+ nmsEbMsg.getParams().encodePrettily());
+			
+			switch (nmsEbMsg.getAction())
+			{
+			case "get_service_info":
+				getServiceInfo(nmsEbMsg);
+				break;							
+			default:
+				LOG.error("unknown action");
+				replyUnknownAction(nmsEbMsg);
+			}
+			msgNbr++;
+		});
+		fut.complete();
+	}
+	
+	private void getServiceInfo(NmsEbMessage message) {
+		JsonObject response = new JsonObject();
+		response.put("service", serviceName);
+		response.put("action", message.getAction());		
+		JsonObject content = new JsonObject()
+			.put("name", "")
+	        .put("role", "")
+			.put("status", "running")
+			.put("messages", msgNbr);
+		response.put("content", content);
+		message.reply(response);	      
+	}
+	
+	protected void replyUnknownAction(NmsEbMessage message) {
+		JsonObject response = new JsonObject();
+		response.put("service", serviceName);
+		response.put("action", message.getAction());
+		response.put("error", "unknown action");
+		message.reply(response);	      
 	}
 	
 	
@@ -135,15 +180,14 @@ public class RestAPIVerticle extends AbstractVerticle {
 		    	.putHeader("content-type", "application/json; charset=utf-8")
 		    	.end(response.encode());
 			return;	
-		}
-		eb.send(service, query, reply -> {
-			if (reply.succeeded()) {
-				//LOG.info(((JsonObject)reply.result().body()).encodePrettily());
+		}		
+		msgNbr++;
+		eb.send(service, query, reply -> {			
+			if (reply.succeeded()) {				
 				routingContext.response()
 			    	.putHeader("content-type", "application/json; charset=utf-8")
 			    	.end(((JsonObject)reply.result().body()).encode());
 			} else {
-		    	//LOG.error("get.serviceinfo failed.", reply.cause());
 				response.put("error", "failed to reach service");
 				routingContext.response()
 			    	.putHeader("content-type", "application/json; charset=utf-8")

@@ -5,6 +5,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
+import io.nms.client.routing.DijkstraAlgorithm;
+import io.nms.client.routing.Graph;
 import io.nms.messages.Capability;
 import io.nms.messages.Message;
 import io.nms.messages.Receipt;
@@ -24,6 +26,7 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 	
 	protected HashMap<String, Capability> knownCaps = new HashMap<String, Capability>();
 	protected Instant lastUpdate = Instant.now();
+	protected Graph topology = new Graph();
 	
 	public void start(Future<Void> fut) {
 		serviceName = "nms.routing";
@@ -32,7 +35,8 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 			if (res.failed()) {
 				fut.fail(res.cause());
 			} else {
-				setTopologyListener();
+				getTopology();
+				setTopologyListener();				
 				// update topo every 60s
 				/*vertx.setPeriodic(TOPO_UPDATE_PERIOD_MS, id -> {
 					LOG.info("Check for new routing capabilities");
@@ -58,12 +62,35 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 		});
 	}
 	
+	private void getTopology() {
+		JsonObject toTopoMsg = new JsonObject()
+				.put("action", "get_topology")
+				.put("params", new JsonObject());
+
+		eb.send("nms.topology", toTopoMsg, reply -> {
+			msgNbr++;
+			if (reply.succeeded()) {				
+				JsonObject response = (JsonObject)reply.result().body();				
+				if (response.containsKey("content")) {
+					LOG.info("got topology");
+					JsonObject jGraph = (response.getJsonObject("content"));
+					topology = new Graph(jGraph);
+				} else {
+					LOG.error("Cannot get topology", response.getString("error"));
+				}
+			} else {
+				LOG.error("Cannot get topology", reply.cause().getMessage());
+			}
+		});
+	}
+	
 	// routing listens to updates from topology service
 	protected void setTopologyListener() {
 		eb.consumer("nms.info.topology", message -> {
-			NmsEbMessage nmsEbMsg = new NmsEbMessage(message);
+			//NmsEbMessage nmsEbMsg = new NmsEbMessage(message);
 			LOG.info("[" + serviceName + "] got topology update.");
-			// TODO: update links and nodes...
+			JsonObject jGraph = ((JsonObject)message.body()).getJsonObject("content");
+			topology = new Graph(jGraph);			
 		});
 	}
 	
@@ -100,6 +127,9 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 			case "add_route":
 				addRoute(nmsEbMsg);
 				break;
+			case "add_auto_route":
+				addAutoRoute(nmsEbMsg);
+				break;
 				
 			case "del_reg_pref":
 				deleteRegPref(nmsEbMsg);
@@ -114,6 +144,7 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 			default:
 				replyUnknownAction(nmsEbMsg);
 			}
+			msgNbr++;
 		});
 	}
 	
@@ -364,7 +395,15 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 			JsonObject response = new JsonObject();
 			response.put("service", serviceName);
 			response.put("action", message.getAction());
-			response.put("error", "Prefix Id missing");
+			response.put("error", "prefix missing");
+			message.reply(response);
+			return;
+		}
+		if (params.getString("targetNode","").isEmpty()) {
+			JsonObject response = new JsonObject();
+			response.put("service", serviceName);
+			response.put("action", message.getAction());
+			response.put("error", "targetNode missing");
 			message.reply(response);
 			return;
 		}
@@ -380,10 +419,10 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 			JsonObject response = new JsonObject();
 			response.put("service", serviceName);
 			response.put("action", message.getAction());
-			response.put("error", "Path cannot be empty");
+			response.put("error", "Path not specified");
 			message.reply(response);
 			return;
-		}
+		}		
 		
 		// check prefix existence
 		Future<Void> getPrefFut = Future.future();
@@ -443,6 +482,130 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 				message.reply(response);
 			} else {
 				params.put("status", "pending");
+				JsonObject addRouteMsg = new JsonObject()
+						.put("action", "add_route")
+						.put("params", params);
+
+				eb.send("nms.storage", addRouteMsg, reply -> {
+					if (reply.succeeded()) {
+						JsonObject response = (JsonObject)reply.result().body();
+						response.put("service", serviceName);
+						response.put("action", message.getAction());
+						message.reply(response);
+						publishUpdatedRoutes();
+					} else {
+						JsonObject response = new JsonObject();
+						response.put("service", serviceName);
+						response.put("action", message.getAction());
+						response.put("error", reply.cause().getMessage());
+						message.reply(response);
+					}
+				});
+			}
+		});
+	}
+	
+	protected void addAutoRoute(NmsEbMessage message) {
+		JsonObject params = message.getParams();
+		if (params.getString("prefix","").isEmpty()) {
+			JsonObject response = new JsonObject();
+			response.put("service", serviceName);
+			response.put("action", message.getAction());
+			response.put("error", "prefix missing");
+			message.reply(response);
+			return;
+		}
+		if (params.getString("targetNode","").isEmpty()) {
+			JsonObject response = new JsonObject();
+			response.put("service", serviceName);
+			response.put("action", message.getAction());
+			response.put("error", "targetNode missing");
+			message.reply(response);
+			return;
+		}
+		if (params.getString("fromNode","").isEmpty()) {
+			JsonObject response = new JsonObject();
+			response.put("service", serviceName);
+			response.put("action", message.getAction());
+			response.put("error", "fromNode missing");
+			message.reply(response);
+			return;
+		}		
+		if (!topology.isSet()) {
+			JsonObject response = new JsonObject();
+			response.put("service", serviceName);
+			response.put("action", message.getAction());
+			response.put("error", "Automatic path option is not available");
+			message.reply(response);
+			return;
+		}
+		
+		// check prefix existence
+		Future<Void> getPrefFut = Future.future();
+		JsonObject getPrefMsg = new JsonObject()
+				.put("action", "get_prefix")
+				.put("params", new JsonObject().put("_id", params.getString("prefix")));
+		eb.send("nms.storage", getPrefMsg, rep -> {
+			if (rep.succeeded()) {
+				JsonObject getPrefResp = (JsonObject)rep.result().body();
+				if (getPrefResp.containsKey("content")) {
+					if (!getPrefResp.getJsonObject("content").isEmpty()) {
+						getPrefFut.complete();
+					} else {
+						getPrefFut.fail("prefix does not exist");
+					}
+				} else {
+					getPrefFut.fail(getPrefResp.getString("error"));
+				}
+			} else {
+				getPrefFut.fail(rep.cause());
+			}
+		});
+		
+		// check nodes existence
+		Future<Void> getNodesFut = Future.future();
+		JsonArray nodes = new JsonArray();		
+		nodes.add(params.getString("fromNode"));
+		nodes.add(params.getString("targetNode"));
+		JsonObject getNodesMsg = new JsonObject()
+				.put("action", "get_nodes")
+				.put("params", new JsonObject().put("nodes", nodes));
+
+		eb.send("nms.storage", getNodesMsg, rep -> {
+			if (rep.succeeded()) {
+				JsonObject getNodesResp = (JsonObject)rep.result().body();
+				if (getNodesResp.containsKey("content")) {
+					int d = getNodesResp.getJsonObject("content").getJsonArray("docs").size();
+					if (d == nodes.size()) {
+						getNodesFut.complete();
+					} else {
+						getNodesFut.fail("targetNode or fromNode does not exist");
+					}
+				} else {
+					getNodesFut.fail(getNodesResp.getString("error"));
+				}
+			} else {
+				getNodesFut.fail(rep.cause());
+			}
+		});
+		
+		// add route
+		CompositeFuture.all(getPrefFut, getNodesFut).setHandler(ar -> {
+			if (ar.failed()) {
+				JsonObject response = new JsonObject();
+				response.put("service", serviceName);
+				response.put("action", message.getAction());
+				response.put("error", ar.cause().getMessage());
+				message.reply(response);
+			} else {
+				/* compute shortest path */
+				String sourceId = params.getString("fromNode");
+				String targetId = params.getString("targetNode");
+				DijkstraAlgorithm dja = new DijkstraAlgorithm(topology);
+				JsonArray path = new JsonArray(dja.getShortestPathById(sourceId, targetId));
+				params.put("status", "pending");
+				params.put("path", path);
+				
 				JsonObject addRouteMsg = new JsonObject()
 						.put("action", "add_route")
 						.put("params", params);
@@ -573,7 +736,8 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 					JsonObject ebPubMsg = new JsonObject()
 							.put("service", serviceName)
 							.put("content", response.getJsonObject("content"));
-					eb.publish("nms.info.routing.prefixes", ebPubMsg);					
+					eb.publish("nms.info.routing.prefixes", ebPubMsg);
+					msgNbr++;
 				} else {
 					LOG.error("Cannot get updated prefixes", response.getString("error"));
 				}
@@ -595,7 +759,8 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 					JsonObject ebPubMsg = new JsonObject()
 							.put("service", serviceName)
 							.put("content", response.getJsonObject("content"));
-					eb.publish("nms.info.routing.routes", ebPubMsg);					
+					eb.publish("nms.info.routing.routes", ebPubMsg);
+					msgNbr++;
 				} else {
 					LOG.error("Cannot get updated routes", response.getString("error"));
 				}

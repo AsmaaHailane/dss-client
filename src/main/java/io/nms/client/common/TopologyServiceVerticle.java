@@ -105,6 +105,7 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 			default:
 				replyUnknownAction(nmsEbMsg);
 			}
+			msgNbr++;
 		});
 	}
 	
@@ -527,7 +528,8 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 					JsonObject ebPubMsg = new JsonObject()
 							.put("service", serviceName)
 							.put("content", response.getJsonObject("content"));
-					eb.publish("nms.info.topology", ebPubMsg);					
+					eb.publish("nms.info.topology", ebPubMsg);
+					msgNbr++;
 				} else {
 					LOG.error("Cannot get updated topology", response.getString("error"));
 				}
