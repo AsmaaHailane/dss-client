@@ -1,6 +1,5 @@
 package io.nms.client.common;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -10,7 +9,6 @@ import io.nms.messages.Receipt;
 import io.nms.messages.Specification;
 import io.nms.storage.NmsEbMessage;
 import io.vertx.core.Future;
-import io.vertx.core.eventbus.Message;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 

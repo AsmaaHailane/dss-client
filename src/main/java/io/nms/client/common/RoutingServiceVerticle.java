@@ -87,10 +87,62 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 	// routing listens to updates from topology service
 	protected void setTopologyListener() {
 		eb.consumer("nms.info.topology", message -> {
-			//NmsEbMessage nmsEbMsg = new NmsEbMessage(message);
 			LOG.info("[" + serviceName + "] got topology update.");
 			JsonObject jGraph = ((JsonObject)message.body()).getJsonObject("content");
 			topology = new Graph(jGraph);			
+		});
+		eb.consumer("nms.info.topology.nodes", message -> {
+			// TODO: check event type add/delete/update...
+			LOG.info("[" + serviceName + "] a node has been deleted.");
+			JsonObject node = ((JsonObject)message.body()).getJsonObject("content");
+			
+			// delete corresponding prefixes
+			JsonObject toStorageMsg1 = new JsonObject()
+					.put("action", "del_prefix_by_node")
+					.put("params", node);
+
+			eb.send("nms.storage", toStorageMsg1, reply -> {
+				if (reply.succeeded()) {
+					LOG.info("[" + serviceName + "] prefixes updated.");
+					publishUpdatedPrefixes();
+				} else {
+					LOG.warn("[" + serviceName + "] prefixes not updated.");
+				}
+			});
+			
+			// delete corresponding routes
+			JsonObject toStorageMsg2 = new JsonObject()
+					.put("action", "del_routes_by_node")
+					.put("params", node);
+
+			eb.send("nms.storage", toStorageMsg2, reply -> {
+				if (reply.succeeded()) {
+					LOG.info("[" + serviceName + "] routes updated.");
+					publishUpdatedRoutes();
+				} else {
+					LOG.warn("[" + serviceName + "] routes not updated.");
+				}
+			});
+		});
+		
+		eb.consumer("nms.info.topology.links", message -> {
+			// TODO: check event type add/delete/update...
+			LOG.info("[" + serviceName + "] got topology update.");
+			JsonObject link = ((JsonObject)message.body()).getJsonObject("content");
+			
+			// delete corresponding routes
+			JsonObject toStorageMsg = new JsonObject()
+					.put("action", "del_routes_by_link")
+					.put("params", link);
+
+			eb.send("nms.storage", toStorageMsg, reply -> {
+				if (reply.succeeded()) {
+					LOG.info("[" + serviceName + "] routes updated.");
+					publishUpdatedRoutes();
+				} else {
+					LOG.warn("[" + serviceName + "] routes not updated.");
+				}
+			});
 		});
 	}
 	
@@ -133,10 +185,7 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 				
 			case "del_reg_pref":
 				deleteRegPref(nmsEbMsg);
-				break;
-			case "del_reg_pref_by_node":
-				deleteRegPrefByNode(nmsEbMsg);
-				break;
+				break;			
 			case "del_route":
 				deleteRoute(nmsEbMsg);
 				break;
@@ -651,6 +700,17 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 				response.put("action", message.getAction());
 				message.reply(response);
 				publishUpdatedPrefixes();
+				
+				// delete corresp routes
+				JsonObject toStorageMsg2 = new JsonObject()
+						.put("action", "del_routes_by_prefix")
+						.put("params", new JsonObject().put("id", params.getString("_id")));
+
+				eb.send("nms.storage", toStorageMsg2, reply2 -> {
+					if (reply2.succeeded()) {						
+						publishUpdatedRoutes();						
+					}
+				});
 			} else {
 				JsonObject response = new JsonObject();
 				response.put("service", serviceName);
@@ -661,7 +721,7 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 		});
 	}
 	
-	protected void deleteRegPrefByNode(NmsEbMessage message) {
+	/* protected void deleteRegPrefByNode(NmsEbMessage message) {
 		JsonObject params = message.getParams();
 		if (params.getString("_id","").isEmpty()) {
 			JsonObject response = new JsonObject();
@@ -690,7 +750,7 @@ public class RoutingServiceVerticle extends AmqpVerticle {
 				message.reply(response);
 				}
 		});
-	}
+	} */
 	
 	protected void deleteRoute(NmsEbMessage message) {
 		JsonObject params = message.getParams();

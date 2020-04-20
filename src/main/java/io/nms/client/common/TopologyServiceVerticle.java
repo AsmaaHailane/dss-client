@@ -450,6 +450,7 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 						response.put("service", serviceName);
 						response.put("action", message.getAction());
 						message.reply(response);
+						publishDeletedNode(params.getString("_id"));
 						publishUpdatedTopology();
 					} else {
 						JsonObject response = new JsonObject();
@@ -483,6 +484,7 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 				response.put("service", serviceName);
 				response.put("action", message.getAction());
 				message.reply(response);
+				publishDeletedLink(params.getString("_id"));
 				publishUpdatedTopology();
 			} else {
 				JsonObject response = new JsonObject();
@@ -537,6 +539,22 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 				LOG.error("Cannot get updated topology", reply.cause().getMessage());
 			}
 		});
+	}
+	
+	private void publishDeletedNode(String id) {		
+		JsonObject ebPubMsg = new JsonObject()
+				.put("service", serviceName)
+				.put("content", new JsonObject().put("id", id));
+		eb.publish("nms.info.topology.nodes", ebPubMsg);
+		msgNbr++;
+	}
+	
+	private void publishDeletedLink(String id) {		
+		JsonObject ebPubMsg = new JsonObject()
+				.put("service", serviceName)
+				.put("content", new JsonObject().put("id", id));
+		eb.publish("nms.info.topology.links", ebPubMsg);
+		msgNbr++;
 	}
 	
 	@Override
