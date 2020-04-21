@@ -1,6 +1,8 @@
 package io.nms.client.common;
 
+import java.sql.Timestamp;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -152,12 +154,12 @@ public class RestAPIVerticle extends AbstractVerticle {
 			return;	
 		}
 		if (!request.containsKey("service")) {
-			response.put("error", "target service field not defined");
+			response.put("error", "target service not defined");
 			routingContext.response()
 		    	.putHeader("content-type", "application/json; charset=utf-8")
 		    	.end(response.encode());
 			return;	
-		}	
+		}
 		String service = request.getString("service");
 		if (service.isEmpty()) {
 			response.put("error", "target service empty");
@@ -166,6 +168,9 @@ public class RestAPIVerticle extends AbstractVerticle {
 		    	.end(response.encode());
 			return;	
 		}
+		
+		publishLogging("Received request for service "+service);
+		
 		if (!request.containsKey("query")) {
 			response.put("error", "query field not defined");
 			routingContext.response()
@@ -194,6 +199,17 @@ public class RestAPIVerticle extends AbstractVerticle {
 			    	.end(response.encode());
 		    }
 		});
+	}
+	
+	protected void publishLogging(String message) {
+		Timestamp ts = new Timestamp(new Date().getTime());
+		JsonObject content = new JsonObject()
+				.put("timestamp", ts.toString())
+				.put("message", message);
+		JsonObject ebPubMsg = new JsonObject()
+				.put("service", serviceName)
+				.put("content", content);
+		eb.publish("nms.logging", ebPubMsg);		
 	}
 	
 	@Override

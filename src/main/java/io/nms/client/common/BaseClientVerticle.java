@@ -1,5 +1,7 @@
 package io.nms.client.common;
 
+import java.sql.Timestamp;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 
@@ -80,6 +82,17 @@ public abstract class BaseClientVerticle extends AbstractVerticle {
 			.put("messages", msgNbr);
 		response.put("content", content);
 		message.reply(response);	      
+	}
+	
+	protected void publishLogging(String message) {
+		Timestamp ts = new Timestamp(new Date().getTime());
+		JsonObject content = new JsonObject()
+				.put("timestamp", ts.toString())
+				.put("message", message);
+		JsonObject ebPubMsg = new JsonObject()
+				.put("service", serviceName)
+				.put("content", content);
+		eb.publish("nms.logging", ebPubMsg);		
 	}
 	
 	@Override

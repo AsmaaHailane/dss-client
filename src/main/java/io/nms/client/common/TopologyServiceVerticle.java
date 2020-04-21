@@ -70,6 +70,8 @@ public class TopologyServiceVerticle extends AmqpVerticle {
 					+ nmsEbMsg.getAction() + " | "
 					+ nmsEbMsg.getParams().encodePrettily());
 			
+			publishLogging("Received message with action "+nmsEbMsg.getAction());
+			
 			switch (nmsEbMsg.getAction())
 			{
 			case "get_service_info":
